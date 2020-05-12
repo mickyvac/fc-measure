@@ -1,0 +1,1382 @@
+unit FlowInterface_FCS_TCPIP;
+
+{$IFDEF FPC}  //for compatibility between delphi  and lazarus
+{$mode delphi}
+{$ENDIF}
+
+interface
+
+uses
+  Classes, SysUtils, StdCtrls, Dialogs, DateUtils, SyncObjs, ExtCtrls, Graphics,
+  myutils, MyParseUtils, Logger, LoggerThreadSafe, ConfigManager, MVConversion, FormGLobalConfig,
+  HWAbstractDevicesNew2, MyAquireThreadNEW_TCPIP, MyTCPClientForKolServer,
+  MyTCPClient_indy, MVvariant_DataObjects, MyThreadUtils; //MyAquireThreadPrototype,
+
+{create descendant of virtual abstract FLOW object and define its methods
+especially including definition of configuration and setup methods}
+
+Const
+  CInterfaceVer = 'Flow-FCScontrol-TCPIP';
+  CFlowTimeoutConstMS = 200;
+
+
+
+
+Type
+
+  //flow commands
+
+  TFlowCmdType = (CFlowCmdSetUNDEF, CFlowCmdSetSP, CFLowCmdSetGas, CFlowCmdUserCmd);
+
+  TSynchroMethod = procedure of object;
+
+
+  TFlowCmdArrayRec = record
+    id: byte;
+    t: TFlowCmdType;
+    paramd: double;
+    parami: longint;
+    paramb: boolean;
+    params: string;
+    responsemethod: TSynchroMethod;  //if not nil then that is request to call synchronize to this method after completing or failing cmd
+                                     //the result of last cmd is to be stored elsewhere
+  end;
+
+  TCmdQueueThreadSafe = class (TMultiReadExclusiveWriteSynchronizer)
+  public
+    constructor Create;
+    destructor Destroy; override;
+  public
+    //this section will be used by aquire thread to pop commands and execute them
+    Asize: word; //allocaed size of cmd array -  which works like queue "round-robin" style
+    cmdArray: array of TFlowCmdArrayRec;
+    strtpos: word; //
+    endpos: word;
+    function PopCmd(Var cmdrec: TFlowCmdArrayRec): boolean; //if ok, non empty then returns cmd from and deletes the oldest record
+    function nWaiting(): word;  //if >0 then there is  work and can use pop
+  public
+    //control interface only uses addcmd
+    function AddCmd(cmd: TFlowCmdArrayRec): boolean;
+    function CanAdd(): boolean; // if there is space for new cmd
+  end;
+  //    cmdwaiting: boolean;  //signal by main thread that new cmd is ready - will be cleared by sub-thread after processing during "synchro reading"
+
+
+
+  TFlowDevicesListThreadSafe = class (TMyLockableObject)     //for devices to iterare over    //TThreadList
+  public
+    constructor Create;
+    destructor Destroy; override;
+  protected
+    devslist: array of TFLowDevices;              // will be used by aquire thread to poll each added device (read only)
+    devsid: array[TFLowDevices] of byte; //addresses
+    fTimeStamp: TDateTime;
+  public
+    procedure AddDev(dev: TFlowDevices; id: byte; lockit: boolean = true);
+    function GetDev(i: byte; Var dev: TFlowDevices; Var id: byte; lockit: boolean = true): boolean;  //returns true if OK
+    procedure ClearAll(lockit: boolean = true);
+  private    //these two methods - to make setup by main control interface
+    //procedure AddAquireName(s: string);
+    //procedure GetAquireNames(Var sl: TStringlist); //creates copy
+    function GetCount: longint;
+    function GetCountNoLock: longint;
+    function GetTimestamp: TDateTime;
+    //function GetName(index: longint): string;  //returns empty string if error
+  public
+    property LastChanged: TDateTime read GetTimestamp;    //locked access
+    property LastChangedNoLock: TDateTime read fTimeStamp;    //locked access
+    property Count: longint read GetCount;                //locked access
+    property CountNoLock: longint read GetCountNoLock;
+    //property Names[index: longint]: string read GetName;
+  end;
+
+
+
+
+  TALicatFlowCtrlRec = record
+    name:  string;
+    d: byte;
+    minSccm: double;
+    maxSccm: double;
+    enabled: boolean;
+  end;
+
+
+
+  TFlowControlFCS_TCPIP = class (TFlowControllerObject)
+    //this obejct controls one serial port with up to N Alicat flow controllers attached
+    //it uses another thread to poll for data on regular basis
+    public
+      constructor Create( p: TPanel);   //p panel to create status reporting controls
+      destructor Destroy; override;
+    public
+    //inherited virtual functions - must override!
+      function Initialize: boolean; override;
+      procedure Finalize; override;
+      procedure ResetConnection; override;
+
+      procedure ManualAquire;
+      procedure ManualProcessCmd;
+
+
+      //basic control functions
+      function Aquire(Var data: TFlowData; Var flags: TCommDevFlagSet): boolean; override;
+      function SetSetp(dev: TFlowDevices; val: double): boolean; override;
+      function SetGas(dev: TFlowDevices; gas: TFlowGasType): boolean; override;
+      function GetRange(dev: TFlowDevices): TRangeRecord; override;
+    private
+      //inherited fields
+      //internal fields for properties
+      //fName: string;
+      //fDummy: boolean;
+      //fReady: boolean;
+      //fStatus: TInterfaceStatus;
+      //----------------------
+    private
+      flock: boolean;  //prevent multiple nesting calls to comm fucntions
+      fDebug: boolean;
+      procedure setDebug(b: boolean);
+    protected
+      fLog:  TMyLoggerThreadSafe;
+      procedure LeaveLogMsg(a: string);   //in order to do it THREAD SAFE. must call logmsg using Synchronize!!!!!!
+    public
+      property Debug: boolean read fDebug write setDebug;
+    private
+      //aquire thread and objects
+      fCmdSynchro: TCmdQueueThreadSafe; //controls access to cmd queue and variables
+      //after finishig, signal can be sent through assigned method
+      fDevicesSynchro: TFlowDevicesListThreadSafe;
+      fDataRegistry: TMyRegistryNodeObject;   //stores data and status - access methods are THREADSAFE!!!
+      fAquireNameList: TStringlist;
+      fAquireNameListTStamp: TDateTime;
+      procedure GenAquireNames(Var sl: TStringlist);
+    protected
+      //thread control
+      fAquireThread: TAquireThreadV2_TCPIP; //TAquireThreadBaseV2;
+      fTargetCycleTimeMS: longword;
+      procedure fMyExecute; //TMyExecuteMethod
+      procedure fMyOnClientStatusChange;  //runs by thread after e.g. connection open
+      procedure ThreadStart;
+      procedure ThreadStop;
+      function IsThreadRunning(): boolean;
+      function getThreadStatus: string;
+    protected
+      //commucation and status display
+      fTCPclient: TMyTCPClientForKolServer;
+      fpanelerf: TPanel;
+      fDoingInit: boolean;
+    private
+      procedure AfterClientStatusChange(nstate: TMyClientState; statusstr: string); //updates reported status - connecting/disconnected etc. - will use datasynchro
+    public
+      procedure ConfigureTCP( server: string; port: string);    //called from main thread, must not block
+      procedure getTCPConf( Var server: string; Var port: string); //called from main thread, must not block
+      procedure ForceClientClose; //this is called from main thread - emergency close - will not check criticial section
+      function IsPortOpen(): boolean;
+    public
+      procedure LoadConfig;
+      procedure SaveConfig;  // prepare variables to be saved config manager
+    private
+      //config storage registry items (do not destroy - managed in the registry objects)
+      fRiTCPHost: TRegistryItem;
+      fRiTCPPort: TRegistryItem;
+      fRiProtocolVer: TRegistryItem;
+
+    protected
+      procedure CreatePanelIface;
+    public
+      procedure UpdatePanelIface;
+    public
+      //user command
+      fUserCmdReplyS: string;
+      fUserCmdReplyTime: TDateTime;
+      fUserCmdReplyIsNew: boolean;
+      fLastCycleInsideMS: longint;
+    public
+      //
+      procedure UpdateDevicesInThread;
+      function SendUserCmd(cmd: string): boolean;
+      procedure ReceiveReplyFromThread;       //"event handler" - reads reply from data.aswerlowlvl when beeing called as syncrhonize from thread
+      function GetLastCycleDurMS: longint;
+      function MakeCmdStr( cmd: TFlowCmdArrayRec ): string;
+    public
+      //flowcontrollers to iterate over - it must be public, because I want to load/save conf from Control Form
+      //after update to this array - the new settings must updated inside the aquire thread (there it is private var)
+      fdevarray: array[TFLowDevices] of TALicatFlowCtrlRec;
+      procedure UpdateDev(dev: TFlowDevices; en: boolean; a: byte; rngmin, rngmax: double);
+      procedure FillDevRecFromRegistry( fd: TFlowDevices; Var frec: TFlowRec; Var fDataRegistry: TMyRegistryNodeObject);
+    private
+      fIsconfigured: boolean;
+      fConfClient: TConfigClient;        //tIni
+      fFormatSettings: TFormatsettings;
+      fMFCCount: longint;
+      fDoingInit: TMy
+      //
+      fsetp: array[TFlowDevices] of double;
+    private
+      procedure ResetLastAquireTime;
+    private
+    //display
+      fMemo: TMemo;
+      fInfoLabel: TLabel;
+  end;
+
+
+
+Const
+  CIdLastAquireTS = '_LastAquireTimeStamp';
+  CIdLastElapsedMS = '_LastAquireElapsedMS';
+  CIdAnswerLowLevel = '_AnswerLowLevel';       //for use with user cmd - answer to last USER cmd - in raw as received
+  CIdCLientState = '_CLientState';
+  CIdCLientStatusStr = '_CLientStatusStr';
+  CIdInterfaceReady = '_InterfaceReady';
+
+Var
+  IDdoingInit: string = '_DoingInit';
+  IdLastAquireTS: string = '_LastAquireTimeStamp';
+  IdLastElapsedMS: string = '_LastAquireElapsedMS';
+  IdAnswerLowLevel: string = '_AnswerLowLevel';       //for use with user cmd - answer to last USER cmd - in raw as received
+  IdCLientState: string = '_CLientState';
+  IdCLientStatusStr: string =  '_CLientStatusStr';
+  IdInterfaceReady: string = '_InterfaceReady';
+
+
+//---------------------------------------
+//helper, conversion functions
+
+function AlicatGasStrToType( gas:  string ): TFlowGasType;
+function AlicateRecStatusToStr( rec: TALicatFlowCtrlRec ): string;
+function AlicatGasTypeToAlicatGasId(gastype: TFlowGasType): byte;
+function AlicatGasIdToGasType(gasid: byte): TFlowGasType;
+
+
+//---------------------------------------
+//Alicat Protocol description
+
+//rs232 conf: 8-N-1-None (8  Data Bits, No Parity, 1 Stop Bit, and no Flow Control) protocol.
+//from manual - how to configure terminal:
+//Click on the “ASCII Setup” button and be sure the “Send Line Ends with Line
+//Feeds” box is not checked and the “Echo Typed Characters Locally” box and
+//the “Append Line Feeds to Incoming Lines” boxes are checked. Those settings
+//not mentioned here are normally okay in the default position.
+//
+// ==>>messages are finsihed by <CR>
+//
+//example commnads
+//change setpoint on A to 4.54:  AS4.54
+//change gas for address B:   B$$#<Enter>
+//read register 21   *R21
+//write register *w91=X, where X is a positive integer from 1 to 65535, followed by “Enter”.
+
+//poll:   <address><CR>
+
+//known registers:
+//91: streaming mode delay
+//21: P of PID
+//22: D of PID
+
+//46: gas type same as control #
+//53: valve offset 0-65535  =0-100%
+//44: ??? identifies max range of flow controller?  2057 = 100sccm  10249 = 500sccm
+
+//poll retun data format
+
+//For mass flow controllers, there are six columns of data representing
+//pressure, temperature, volumetric flow, mass flow, set-point, and the selected gas
+//
+//example
+//+014.70 +025.00 +02.004 +02.004 2.004 Air
+
+//Gas codes (new alicat) 15.2.2016 MV:
+//6=H2
+//0=Air
+//1=Ar
+//7=He
+//8=N2
+//11=O2
+
+
+
+Implementation
+
+uses Math, Windows, Forms, MyAquireThreadPrototype, MyAquireThreadNEW,
+  Controls;
+
+
+//****************************
+//        Alicat flow control
+//****************************
+
+
+constructor TFlowControlFCS_TCPIP.Create( p: TPanel);
+begin
+  inherited Create;
+  fName := CInterfaceVer;
+  fDummy := false;
+
+  fLog := TMyLoggerThreadSafe.Create('!flow-fcs-tcpip_', '', GlobalConfig.getAppPath + 'log' + CPathSlash);
+
+  fcmdsynchro := TCmdQueueThreadSafe.Create;
+  fdevicessynchro := TFlowDevicesListThreadSafe.Create;
+  fAquireNameList := TStringlist.Create;
+
+  fDataRegistry := TMyRegistryNodeObject.Create('FlowDataAndStatus');
+  fDataRegistry.GetOrCreateItem( CIdLastAquireTS );
+  fDataRegistry.GetOrCreateItem( CIdLastElapsedMS );
+  fDataRegistry.GetOrCreateItem( CIdAnswerLowLevel ); //for use with user cmd - answer to last USER cmd - in raw as received
+  fDataRegistry.GetOrCreateItem( CIdCLientState );
+  fDataRegistry.GetOrCreateItem( CIdCLientStatusStr );
+  fDataRegistry.GetOrCreateItem( CIdInterfaceReady );
+  fDataRegistry.GetOrCreateItem( IDdoingInit );
+
+  fTCPclient :=  TMyTCPClientForKolServer.Create;
+  if fTCPclient<>nil then
+    begin
+      fTCPClient.AssignLogProc( LeaveLogMsg );
+      fTCPClient.AssignOnStatusChange( AfterClientStatusChange );
+    end;
+
+  fAquireThread := TAquireThreadV2_TCPIP.Create( fMyExecute, TMyTCPClientThreadSafe(fTCPclient), fMyOnClientStatusChange );
+  fready := false;
+  if fAquireThread<>nil then
+    begin
+      fAquireThread.SetUserSuspend;
+      fAquireThread.Resume;
+    end;
+  //
+  //
+  fConfClient := TConfigClient.Create( GlobalConfig.ConfigServerHW, 'Alicat-via-FCSTCPIP' );
+  fIsconfigured := false;
+  //
+  GetLocaleFormatSettings(0, fFormatSettings );    //TFormatSettings
+  //For Alicat!!! define "." as deciaml separator
+  fFormatSettings.DecimalSeparator := '.';
+  //
+  fTargetCycleTimeMS := 300;
+  //
+  fpanelerf := p;
+  CreatePanelIface;
+  //
+  logmsg('TFlowControlFCS_TCPIP.Create: done.');
+  LeaveLogMsg('TFlowControlFCS_TCPIP.Create: done.');
+end;
+
+
+destructor TFlowControlFCS_TCPIP.Destroy;
+
+begin
+  if fReady then Finalize;             //tthread.destroy
+  if fAquireThread<> nil then
+    begin
+      fAquireThread.TerminateAndWaitForExecuteFinish;
+      fAquireThread.Free;
+    end;
+  if fTCPclient<>nil then fTCPclient.Close;
+  fTCPclient.Destroy;
+  //
+  fdevicessynchro.Destroy;
+  fcmdsynchro.Destroy;
+  fDataRegistry.Destroy;
+  fAquireNameList.Destroy;
+  //
+  fConfClient.Destroy;
+  //
+  fLog.Destroy;
+  inherited;
+end;
+
+
+procedure TFlowControlFCS_TCPIP.CreatePanelIface;
+var
+ w,h: integer;
+
+begin
+  if fpanelerf=nil then exit;
+  w := fpanelerf.Width;
+  h := fpanelerf.Height;
+  fInfoLabel := TLabel.Create(nil);
+  with fInfoLabel do
+    begin
+      Parent := fpanelerf;
+      autosize := false;
+      height := 20;
+      top := 1;
+      left := 1;
+      width := fpanelerf.Width;
+      font.Color := clLime;
+      Color := clBlack;
+
+    end;
+  fMemo := TMemo.Create(nil);
+  with fMemo do
+    begin
+      Parent := fpanelerf;
+      top := 25;
+      left := 1;
+      width := fpanelerf.Width;
+      height := fpanelerf.Height - 30;
+    end;
+end;
+
+procedure TFlowControlFCS_TCPIP.UpdatePanelIface;
+begin
+  if fInfoLabel<>nil then
+    begin
+      fInfoLabel.Caption := 'TCP: ' + fTCPclient.ConfHost + ':' + fTCPclient.ConfPort
+                                  +  ' || ' + fTCPclient.ClientStateDescription;
+    end;
+  if fMemo<>nil then
+    begin
+      fMemo.Lines.Clear;
+      fMemo.Lines.Add( 'TCP client - configured: '+ BoolToStr( fTCPclient.IsConfigured) + ' connected:' + BoolToStr( fTCPclient.IsConnected) + ' ready:' + BoolToStr( fTCPclient.IsReady));
+      fMemo.Lines.Add( 'TCP client status: '+ fTCPclient.ClientStateDescription );
+      fMemo.Lines.Add( 'Thread: ' +  fAquireThread.getThreadStatusStr );
+      fMemo.Lines.Add( 'Devices Count: ' + IntToStr( fdevicessynchro.Count ) );
+      fMemo.Lines.Add( 'FlowInterface READY: ' + BoolToStr( IsReady ) );
+    end;
+end;
+
+
+//inherited functions overload
+
+
+//**************
+//basic control functions
+//---------------------
+
+function TFlowControlFCS_TCPIP.Initialize: boolean;
+Var
+  b: boolean;
+  t0: longword;
+begin
+  Result := false;
+  fReady := false;
+  //
+  if not fIsconfigured then
+    begin
+      LoadConfig;
+    end;
+  //
+  fsetp[CFlowAnode] := 0;   //CFlowAnode, CFlowCathode, CFlowN2, CFlowRes
+  fsetp[CFlowCathode] := 0;
+  fsetp[CFlowN2] := 0;
+  fsetp[CFlowRes] := 0;
+  // TCpClient - open via thread in background
+  //fTCPclient.ConfigureTCP('localhost', '20005');
+  //fTCPClient.Open;
+  //fAquireThread.ConfigureTCP('195.113.25.204', '20005');
+  //fAquireThread.ConfigureTCP('195.113.25.204', '20005');
+  fAquireThread.OpenTCP;
+  ThreadStart;
+  fDoingInit := true;
+  //reset last aquire time
+  ResetLastAquireTime;
+  //
+  fUserCmdReplyIsNew := false;
+  //fready IS NOT SET HERE - at is set in the aquire thread after succesfull connection !!!!;
+  Result := true;
+  logmsg('TFlowControlFCS_TCPIP.Initialize:' + fName +' result' + 'is ready: ' + BoolToStr(fReady) );
+  logmsg('             .... Iface ver str: ' + CInterfaceVer );
+end;
+
+
+procedure TFlowControlFCS_TCPIP.Finalize;
+begin
+  logmsg('TFlowControlFCS_TCPIP.Finalize: Stopping thread...!!!' );
+  fready  := false;
+  ThreadStop;
+  fLastAquireTimeMS := -1;
+  ForceClientClose;  //will force close even during openingn in progress (calls fTCPclient.Close)
+  fAquireThread.CloseTCP;
+end;
+
+
+procedure TFlowControlFCS_TCPIP.LoadConfig;
+Var i: integer;
+    s, s2, fdname, fddef, sec: string;
+    fd: TFlowDevices;
+    tl: TTokenList;
+begin
+  //flowdevices
+  //FMFCCount := fConfClient.Load('MFCCount', 0);
+  sec := CInterfaceVer;
+  fd := CFlowAnode;
+  fdname := 'MFCA';
+  fddef := '1;5000;1';
+  s := RegistryHW.NewItemDef(sec, fdname, fddef).valStr;   //s := fConfClient.Load(fdname, fddef);
+  ParseStrSep(s,';', tl);
+  if length(tl)>=3 then
+    begin
+      fdevarray[fd].name := fdname;
+      fdevarray[fd].d := MyXStrToInt( tl[0].s );
+      fdevarray[fd].maxSccm := MyStrToFloat( tl[1].s );
+      fdevarray[fd].minSccm := 0;
+      fdevarray[fd].enabled := StrToBool( tl[2].s );
+    end;
+  fd := CFlowN2;
+  fdname := 'MFCN';
+  fddef := '2;100;1';
+  s := RegistryHW.NewItemDef(sec, fdname, fddef).valStr;    //s := fConfClient.Load(fdname, fddef);
+  ParseStrSep(s,';', tl);
+  if length(tl)>=3 then
+    begin
+      fdevarray[fd].name := fdname;
+      fdevarray[fd].d := MyXStrToInt( tl[0].s );
+      fdevarray[fd].maxSccm := MyStrToFloat( tl[1].s );
+      fdevarray[fd].minSccm := 0;
+      fdevarray[fd].enabled := StrToBool( tl[2].s );
+    end;
+  fd := CFlowCathode;
+  fdname := 'MFCC';
+  fddef := '3;5000;1';
+  s := RegistryHW.NewItemDef(sec, fdname, fddef).valStr;
+  ParseStrSep(s,';', tl);
+  if length(tl)>=3 then
+    begin
+      fdevarray[fd].name := fdname;
+      fdevarray[fd].d := MyXStrToInt( tl[0].s );
+      fdevarray[fd].maxSccm := MyStrToFloat( tl[1].s );
+      fdevarray[fd].minSccm := 0;
+      fdevarray[fd].enabled := StrToBool( tl[2].s );
+    end;
+  fd := CFlowRes;
+  fdname := 'MFCMix';
+  fddef := '4;100;1';
+  s := RegistryHW.NewItemDef(sec, fdname, fddef).valStr;
+  ParseStrSep(s,';', tl);
+  if length(tl)>=3 then
+    begin
+      fdevarray[fd].name := fdname;
+      fdevarray[fd].d := MyXStrToInt( tl[0].s );
+      fdevarray[fd].maxSccm := MyStrToFloat( tl[1].s );
+      fdevarray[fd].minSccm := 0;
+      fdevarray[fd].enabled := StrToBool( tl[2].s );
+    end;
+  //Use device config
+  UpdateDevicesInThread;
+  //
+  // TCP parameters + protocolo version
+  fRiTCPHost := RegistryHW.NewItemDef(sec, 'TCPHost', 'localhost');   //s := fConfClient.Load('TCPHost', 'localhost');
+  fRiTCPPort := RegistryHW.NewItemDef(sec, 'TCPPort', '20005');  //s2 := fConfClient.Load('TCPPort', '20005');
+  fRiProtocolVer := RegistryHW.NewItemDef(sec, 'ProtocolVersion', 1);   //i := fConfClient.Load('ProtocolVersion', 1);
+  //
+  ConfigureTCP(fRiTCPHost.valStr, fRiTCPPort.valStr);
+  fTCPclient.ProtocolVer := fRiProtocolVer.valInt;
+  //
+  //other
+  //s := fConfClient.Load('ListOfAquireObjects', 'MFC1, MFC2, MFC3, MFC4');
+  fIsconfigured := true;
+end;
+
+
+procedure TFlowControlFCS_TCPIP.SaveConfig;
+begin
+end;
+
+
+procedure TFlowControlFCS_TCPIP.ResetConnection;
+//close port, open port - this should help it seems
+begin
+  logmsg('TFlowControlFCS_TCPIP.ResetConnection: Closing and opening PORT!!!' );
+  fAquireThread.ResetConnection;
+end;
+
+
+
+
+procedure TFlowControlFCS_TCPIP.GenAquireNames(Var sl: TStringlist);
+
+  procedure AddPollDeviceCmd( Var cmdlist: TStringList; id: byte );
+  Var
+   s: string;
+ begin
+  if cmdlist=nil then exit;
+  s := 'MFC'+IntToStr(id);
+  cmdlist.Add(s);   //'GET '+
+  cmdlist.Add(s+'SET');
+  cmdlist.Add(s+'S');
+  cmdlist.Add(s+'GAS');
+ end;
+
+Var
+  i, n: longint;
+  dev: TFlowDevices;
+  did: byte;
+begin
+  sl.Clear;
+  fDevicesSynchro.Lock;
+    n := fDevicesSynchro.CountNoLock;
+    for i:=0 to n-1 do
+      begin
+        fDevicesSynchro.GetDev(i, dev, did, false);
+        AddPollDeviceCmd(sl, did);
+      end;
+  fDevicesSynchro.UnLock;
+end;
+
+
+
+procedure UpdateDevRec(Var frec: TFlowRec; Var rlist: TStringlist; ofs: byte);
+begin
+  InitWithNAN( frec );
+  if rlist=nil then exit;
+  if rlist.Count < ofs+3 then exit;
+  frec.timestamp := Now;
+  frec.massflow := MyStrToFloat( rlist.Strings[ofs]);
+  frec.setpoint := MyStrToFloat( rlist.Strings[ofs+1]);
+  frec.pressure := MyStrToFloat( rlist.Strings[ofs+2]);
+  frec.gastype := AlicatGasIdToGasType( MyXStrToInt( rlist.Strings[ofs+3] ));
+  frec.volflow := NAN;
+  frec.temp := NAN;
+end;
+
+procedure TFlowControlFCS_TCPIP.FillDevRecFromRegistry( fd: TFlowDevices; Var frec: TFlowRec; Var fDataRegistry: TMyRegistryNodeObject);
+Var
+  fdname: string;
+begin
+  InitWithNAN(frec);
+  if fDataRegistry=nil then exit;
+  fdname := fdevarray[fd].name;
+  frec.massflow := fDataRegistry.valDouble[ fdname ];
+  frec.setpoint := fDataRegistry.valDouble[ fdname + 'SET' ];
+  frec.pressure := fDataRegistry.valDouble[ fdname + 'S' ];
+  frec.gastype  := AlicatGasIdToGasType( fDataRegistry.valInt[ fdname + 'GAS' ] );
+  frec.timestamp := fDataRegistry.valDouble[ CIdLastAquireTS ];
+end;
+
+
+procedure TFlowControlFCS_TCPIP.ManualAquire;
+
+Var
+  n, m: byte;
+  w: word;
+  i, k, fdid: longint;
+  b: boolean;
+  //cmd: TFlowCmdArrayRec;
+  t0, t, dt: longword;
+  replylist: Tstringlist;
+  //frec: TFlowRec;
+  needupdate: boolean;
+  name, val: string;
+  ri: TRegistryItem;
+  fd: TFlowDevices;
+begin
+    if (fdevicessynchro=nil) or (fcmdsynchro=nil) or (fDataRegistry=nil) then
+      begin
+        LeaveLogMsg('Some of "synchro" objects is NIL - exit');
+        exit;
+      end;
+   if not fready then exit;
+   replylist := TStringList.Create;
+   //verify and update faquireNameslist
+    needupdate := fAquireNameListTStamp < fDevicesSynchro.LastChanged;
+    if needupdate then
+        begin
+          GenAquireNames( fAquireNameList );
+          fAquireNameListTStamp := Now;
+        end;
+    //
+    n := fAquireNameList.Count;
+    if n>0 then
+      begin
+         b := fTCPclient.QueryGetVariables(fAquireNameList, replylist);
+         if b then
+           begin
+             for i:=0 to n-1 do
+               begin
+                 //store reply into dataregistry
+                 //assuming replylist has format of name=value
+                 name := replylist.Names[i]; //name := fAquireNameList.Strings[i];
+                 val := replylist.ValueFromIndex[i];
+                 ri := fDataRegistry.GetOrCreateItem(name);
+                 if ri<>nil then ri.SetData( val );
+               end;
+           end;
+      end;
+    //
+    replylist.Destroy;
+end;
+
+
+
+
+procedure TFlowControlFCS_TCPIP.ManualProcessCmd;
+
+Var
+  n: byte;
+  w: word;
+  i, k: longint;
+  b: boolean;
+  ardev: array[byte] of TFlowDevices;
+  arid: array[byte] of byte;
+  cmd: TFlowCmdArrayRec;
+  t0, t, dt: longword;
+  cmdstrlist, replylist: Tstringlist;
+  frec: TFlowRec;
+begin
+    if (fdevicessynchro=nil) or (fcmdsynchro=nil) or (fDataRegistry=nil) then
+      begin
+        LeaveLogMsg('Some of "synchro" objects is NIL - sleep 10sec and retry');
+        exit;
+      end;
+   if not fready then exit;
+    //
+   cmdstrlist := TStringList.Create;
+   replylist := TStringList.Create;
+    fcmdsynchro.BeginRead;
+      w := fcmdsynchro.nWaiting;
+      for i:=0 to w-1 do
+        begin
+           b := fcmdsynchro.PopCmd( cmd );
+           if b then cmdstrlist.Add( MakeCmdStr( cmd ) );
+        end;
+    fcmdsynchro.EndRead;
+    if cmdstrlist.Count>0 then b := fTCPclient.QueryDoCommands(cmdstrlist, replylist);
+   //
+   cmdstrlist.Destroy;
+   replylist.Destroy;
+end;
+
+function TFlowControlFCS_TCPIP.Aquire(Var data: TFlowData; Var flags: TCommDevFlagSet): boolean;
+//
+Var
+  d: TFlowDevices;
+  lastaq : tDateTime;
+begin
+  Result := false;
+  flags := [];
+  if not fReady then exit;
+  for d := Low(TFlowDevices) to High(TFlowDevices) do
+      begin
+        if fdevarray[d].enabled then
+          begin
+            FillDevRecFromRegistry(d, data[d], fDaTaRegistry );
+          end
+        else
+          begin
+            InitWithNAN( data[d]);  //for disabled devices, fill NAN
+            Include(data[d].flagSet, CFlowDevDisabled);
+          end;
+      end;
+    lastaq :=  fDataRegistry.valDouble[ CIdLastAquireTS ];
+    fLastCycleInsideMS := fDataRegistry.valInt[ CIdLastElapsedMS ];
+  // check for communication connection lost
+  if TimeDeltaNowMS( lastaq ) > CFlowTimeoutConstMS then  Include(flags, CConnectionLost);
+  Result := true;
+end;
+
+
+
+function TFlowControlFCS_TCPIP.SetSetp(dev: TFlowDevices; val: double): boolean;
+Var
+  min, max, oldv: double;
+  cmdsync: TCmdQueueThreadSafe;
+  b, canadd: boolean;
+  cmdrec: TFlowCmdArrayRec;
+  nw: word;
+  altsp: word;
+Const
+  epsilon = 0.01;
+begin
+   Result := false;
+   if not fready then exit;
+   //
+   oldv := val;
+   min := fdevarray[dev].minSccm;
+   max := fdevarray[dev].maxSccm;
+   if fDebug then logmsg('TFlowControlFCS_TCPIP.SetSetp: dev ' + FlowDevToStr(dev) + ' sp: ' + FloatToStr(val) + ' (min: ' + FloatToStr(min) + ',max: ' + FloatToStr(max) );
+   if not MakeSureIsInRange(val, min-epsilon, max+epsilon) then LogWarning('TFlowControlFCS_TCPIP.SetSetp:  setpoint outside allowed range - ADJUSTING!!!! (from ' + FloatToStr(oldv) +' to ' + FloatToStr(val) +')');
+   //calculate compatibility setpoin value (it is in relative value from 0 to 64000 related to maxvalue  fo flow => depends on device range
+   //prepare cmd
+   cmdrec.id := fdevarray[dev].d;
+   cmdrec.t := CFlowCmdSetSP;
+   cmdrec.paramd := val;
+   cmdrec.parami := altsp;
+   cmdrec.paramb := false;
+   cmdrec.responsemethod := nil;
+   //enqueue new command into aquire thread
+   cmdsync := fcmdsynchro;
+   if cmdsync=nil then exit;
+   //
+   b := false;
+   cmdsync.beginwrite;
+      canadd := cmdsync.CanAdd();
+      b := cmdsync.AddCmd( cmdrec );
+      nw := cmdsync.nWaiting;
+   cmdsync.endwrite;
+   if not canadd then logmsg('eeee TFlowControlFCS_TCPIP.SetSetp cannot add CMD to CMDsynchro');
+   if fDebug then logmsg('iiii TFlowControlFCS_TCPIP.SetSetp - addded cmd, total waiting now: '+ IntToStr(nw) );
+   if b then
+     begin
+       fsetp[dev] := val;
+       Result := true;
+     end;
+
+end;
+
+
+function TFlowControlFCS_TCPIP.SetGas(dev: TFlowDevices; gas: TFlowGasType): boolean;
+Var
+  cmdsync: TCmdQueueThreadSafe;
+  b, canadd: boolean;
+  cmdrec: TFlowCmdArrayRec;
+  nw: word;
+  thisid: string;
+begin
+   Result := false;
+   if not fready then exit;
+   //
+   thisid := 'TFlowControlFCS_TCPIP.SetGas';
+   if fDebug then logmsg(thisid + ': dev ' + FlowDevToStr(dev) + ' sp: ' + FlowGasTypeToStr(gas) );
+   //prepare cmd
+   cmdrec.id := fdevarray[dev].d;
+   cmdrec.t := CFlowCmdSetGas;
+   cmdrec.parami := AlicatGasTypeToAlicatGasId(gas);
+   cmdrec.responsemethod := nil;
+   if gas=CGasUnknown then
+     begin
+       logwarning(thisid + ': invalid argument of gas ID');
+       exit;
+     end;
+   //enqueue new command into aquire thread
+   cmdsync := fcmdsynchro;
+   if cmdsync=nil then exit;
+   //
+   b := false;
+   cmdsync.beginwrite;
+      canadd := cmdsync.CanAdd();
+      b := cmdsync.AddCmd( cmdrec );
+      nw := cmdsync.nWaiting;
+   cmdsync.endwrite;
+   if not canadd then logmsg(thisid + ': eeee cannot add CMD to CMDsynchro');
+   if fDebug then logmsg(thisid + ': iii addded cmd, total waiting now: '+ IntToStr(nw) );
+   Result := b;
+end;
+
+
+function TFlowControlFCS_TCPIP.GetRange(dev: TFlowDevices): TRangeRecord;
+begin
+  Result.low := fdevarray[dev].minSccm;
+  Result.high := fdevarray[dev].maxSccm;
+end;
+
+
+
+procedure TFlowControlFCS_TCPIP.setDebug(b: boolean);
+begin
+  fDebug := b;
+  //if AquireThread<>nil then AquireThread.Debug := b;
+end;
+
+
+procedure TFlowControlFCS_TCPIP.ResetLastAquireTime;
+Var
+  lastaq : tDateTime;
+begin
+  if fDataRegistry=nil then exit;
+  fDataRegistry.valDouble[ CIdLastAquireTS ] := Now;
+end;
+
+// aquire thread, execute poll devices
+
+
+
+procedure TFlowControlFCS_TCPIP.fMyExecute; //TMyExecuteMethod
+Var
+  b: boolean;
+  t0, t, dt: longword;
+begin
+    if (fdevicessynchro=nil) or (fcmdsynchro=nil) or (fDataRegistry=nil) then
+      begin
+        LeaveLogMsg('Some of "synchro" objects is NIL - sleep 10sec and retry');
+        exit;
+      end;
+    //check if iface became ready after init was called
+    {if fDoingInit and (not fready) then
+      begin
+        if not fTCPclient.IsReady then exit;
+        fDoingInit := false;
+        if fTCPclient.VerifyConnectionToServer then fready := true;
+      end;}
+    if not fready then exit;
+    //
+   t0 := TimeDeltaTICKgetT0;
+   //
+   ManualAquire;
+   ManualProcessCmd;
+    //
+    //
+    t := TimeDeltaTICKNowMS(t0);
+    fLastCycleInsideMS := t;
+    fDataRegistry.valDouble[ CIdLastAquireTS ] := Now;
+    fDataRegistry.valInt[ CIdLastElapsedMS ] := t;
+    //
+    dt := longword(fTargetCycleTimeMS) - t;
+    if fDebug then LeaveLogMsg('  finished in ms: ' + IntToStr(t) + ' ... target cycle is ' + IntToStr(fTargetCycleTimeMS) );
+    if t<longword(fTargetCycleTimeMS) then sleep( dt );  //some sleep or something - only if whole process took less than NNN ms
+end;
+
+
+
+procedure TFlowControlFCS_TCPIP.fMyOnClientStatusChange;
+//runs by thread after e.g. connection open
+//verifies conenction to server and if OK sets the READY! flag
+Var
+  conOK: boolean;
+begin
+  //check if client connected during init - then verify connection and if all ok , sets READY FLAG
+  if fDoingInit then
+    begin
+      conOK := false;
+      if fTCPclient.IsReady then conOK := fTCPclient.VerifyConnectionToServer;
+      fready := conOK;
+      fDoingInit := false;
+    end
+  else if fReady then
+    begin
+      if not fTCPclient.IsReady then fReady := false;
+    end;
+  fDataRegistry.valBool[ CIdInterfaceReady ] := fready;
+end;
+
+procedure TFlowControlFCS_TCPIP.AfterClientStatusChange(nstate: TMyClientState; statusstr: string);
+begin
+  if fDataRegistry = nil then exit;
+  //in this proc only update status - checking to switch interface ready is done
+  //in the other function after signal from worker thread...
+  fDataRegistry.valstr[ CIdCLientState ] := ClientStateToStr( fTCPclient.ClientState );
+  fDataRegistry.valstr[ CIdCLientStatusStr ] := fTCPclient.ClientStateDescription;
+end;
+
+
+
+
+function TFlowControlFCS_TCPIP.MakeCmdStr( cmd: TFlowCmdArrayRec ): string;
+Var
+  msg, rxb: string;
+  b: boolean;
+  toklist: TTokenList;
+  d1, d2, d3, d4, d5: double;
+  w: word;
+  devid, gas: string;
+  frec: TFlowRec;
+  s, s2: string;
+
+begin
+  Result := '';
+  if fDebug then  LeaveLogMsg('TMyFlowAquireThread.MakeCmdDone: addr: ' + IntTOStr(cmd.id) );
+  //generate msg based on cmd
+  case cmd.t of
+    CFlowCmdSetSP:
+      begin
+        s := 'SET ' + 'MFC'+inttostr(cmd.id)+'SP'+ FloatToStr( cmd.paramd , fFormatSettings);
+      end;
+    CFlowCmdUserCmd:
+      begin
+        s := cmd.params + '';  //force copy
+        //LeaveLogMsg('Alicat USER CMD: ' + BinStrToPrintStr(s) );
+      end;
+    CFlowCmdSetGas:
+      begin
+        s :=  'SET ' + 'MFC'+inttostr(cmd.id)+'GAS'+ IntToStr( cmd.parami );
+      end;
+  end;
+  if fDebug then  LeaveLogMsg('TMyFlowAquireThread.MakeCmdDone: sending cmd: ' + BinStrToPrintStr(msg) );
+  Result := s;
+end;
+
+
+
+
+
+
+
+
+
+procedure TFlowControlFCS_TCPIP.ConfigureTCP( server: string; port: string);    //called from main thread, must not block
+begin
+  if fAquireThread=nil then exit;
+  fAquireThread.ConfigureTCP(server, port);
+end;
+
+procedure TFlowControlFCS_TCPIP.getTCPConf( Var server: string; Var port: string); //called from main thread, must not block
+begin
+  if fTCPclient=nil then exit;
+  server := fTCPclient.ConfHost;
+  port := fTCPclient.ConfPort;
+end;
+
+procedure TFlowControlFCS_TCPIP.ForceClientClose; //this is called from main thread - emergency close - will not check criticial section
+begin
+  if fTCPclient=nil then exit;
+  fTCPclient.CLose;
+end;
+
+function TFlowControlFCS_TCPIP.IsPortOpen(): boolean;
+begin
+  Result := false;
+  if fTCPclient=nil then exit;
+  Result := fTCPClient.IsConnected;
+end;
+
+
+//  TALicatFlowCtrlRec = record
+//    d: byte;
+//    minSccm: double;
+//    maxSccm: double;
+//    enabled: boolean;
+// end;
+
+
+
+
+
+
+procedure TFlowControlFCS_TCPIP.ThreadStart;
+begin
+  if fAquireThread = nil then exit;
+  logmsg('TFlowControlFCS_TCPIP.ThreadStart: calling RESUME');
+  fAquireThread.ResetUserSuspend;
+  fAquireThread.Resume;     //TThread  //in case it was suspended
+end;
+
+
+procedure TFlowControlFCS_TCPIP.ThreadStop;
+begin
+  if fAquireThread = nil then exit;
+  logmsg('TFlowControlFCS_TCPIP.ThreadStart: calling SUSPEND');
+  fAquireThread.SetUserSuspend;
+end;
+
+
+function TFlowControlFCS_TCPIP.IsThreadRunning(): boolean;
+begin
+  Result := false;
+  if fAquireThread = nil then exit;
+  Result := fAquireThread.IsThreadRunning;
+end;
+
+function TFlowControlFCS_TCPIP.getThreadStatus: string;
+begin
+  Result := 'NIL';
+  if fAquireThread = nil then exit;
+  Result := fAquireThread.getThreadStatusStr;
+end;
+
+
+procedure TFlowControlFCS_TCPIP.UpdateDevicesInThread;
+Var
+  devsync: TFlowDevicesListThreadSafe;
+  d: TFlowDevices;
+begin
+  devsync := fdevicessynchro;
+  if devsync = nil then exit;
+  devsync.ClearAll();
+  for d:= low(TFlowDevices) to High(TFlowDevices) do
+      begin
+        if fdevarray[d].enabled then devsync.AddDev(d, fdevarray[d].d);
+      end;
+end;
+
+
+
+function TFlowControlFCS_TCPIP.SendUserCmd(cmd: string): boolean;
+Var
+  cmdsync: TCmdQueueThreadSafe;
+  b, canadd: boolean;
+  cmdrec: TFlowCmdArrayRec;
+  nw: word;
+begin
+   Result := false;
+   if not fready then exit;
+   if fDebug then logmsg('TFlowControlFCS_TCPIP.SendUserCmd: ' + BinaryStrTostring(cmd) );
+   //prepare cmd
+   cmdrec.t := CFlowCmdUserCmd;
+   cmdrec.params := cmd  + '';
+   cmdrec.responsemethod := ReceiveReplyFromThread;
+   //enqueue new command into aquire thread
+   if fAquireThread=nil then
+     begin
+       logmsg('TFlowControlFCS_TCPIP.SetSetp AquireThread=nil ');
+       exit;
+     end;
+   cmdsync := fcmdsynchro;
+   if cmdsync=nil then exit;
+   //
+   b := false;
+   cmdsync.beginwrite;
+      CanAdd := cmdsync.CanAdd();
+      b := cmdsync.AddCmd( cmdrec );
+      nw := cmdsync.nWaiting;
+   cmdsync.endwrite;
+   if not CanAdd  then logmsg('eeee TFlowControlFCS_TCPIP.SetSetp cannot add CMD to CMDsynchro');
+   if fDebug then logmsg('iiii TFlowControlFCS_TCPIP.SetSetp - addded cmd, total waiting now: '+ IntToStr(nw) );
+   Result := b;
+end;
+
+
+procedure TFlowControlFCS_TCPIP.ReceiveReplyFromThread;       //reads reply from data.aswerlowlvl
+//
+Var
+  copys : string;
+begin
+  if fAquireThread=nil then exit;
+  if fDataRegistry=nil then exit;
+  fUserCmdReplyS := fDataRegistry.valStr[ CIdAnswerLowLevel ];
+  fUserCmdReplyTime := Now;
+  fUserCmdReplyIsNew := true;
+  logmsg('TFlowControlFCS_TCPIP.ReceiveReplyFromThread str=' + BinStrToPrintStr( fUserCmdReplyS) );
+end;
+
+function TFlowControlFCS_TCPIP.GetLastCycleDurMS: longint;
+begin
+  if fAquireThread=nil then exit;
+  Result := fAquireThread.LastCycleMS;
+end;
+
+
+
+procedure TFlowControlFCS_TCPIP.UpdateDev(dev: TFlowDevices; en: boolean; a: byte; rngmin, rngmax: double);
+begin
+  with fdevarray[ dev ] do
+    begin
+      enabled := en;
+      d := a;
+      minsccm := rngmin;
+      maxsccm := rngmax;
+    end;
+end;
+
+
+
+procedure TFlowControlFCS_TCPIP.LeaveLogMsg(a: string);
+begin
+  if flog=nil then exit;
+  fLog.LogMsg(a);
+end;
+
+//****************************************************
+
+
+constructor TCmdQueueThreadSafe.Create;
+Const
+  CDefaultCmdArraySize = 100;
+begin
+  inherited;
+  Asize := CDefaultCmdArraySize;
+  setLength( cmdArray, CDefaultCmdArraySize );
+  strtpos := 0;
+  endpos := 0; //strpos == endpos =-> empty
+end;
+
+
+destructor TCmdQueueThreadSafe.Destroy;
+begin
+  Asize := 0;
+  setLength( cmdArray, 0 );
+  inherited;
+end;
+
+function TCmdQueueThreadSafe.PopCmd(Var cmdrec: TFlowCmdArrayRec): boolean;
+begin
+  Result := false;
+  cmdrec.t := CFlowCmdSetUNDEF;
+  if strtpos=endpos then exit;  //meaning array is empty
+  cmdrec := cmdArray[strtpos];
+  Inc( strtpos );
+  if strtpos >= Asize then strtpos := 0;
+  Result := true;
+end;
+
+function TCmdQueueThreadSafe.nWaiting(): word;  //if >0 then there is  work and can use pop
+begin
+  if endpos>=strtpos then Result := endpos - strtpos
+  else Result := Asize - (strtpos - endpos);
+end;
+
+function TCmdQueueThreadSafe.AddCmd(cmd: TFlowCmdArrayRec): boolean;
+begin
+  Result := false;
+  if not CanAdd then exit;
+  cmdArray[ endpos ] := cmd;
+  Inc(endpos);
+  if endpos>=Asize then endpos := 0;
+  Result := true;
+end;
+
+function TCmdQueueThreadSafe.CanAdd(): boolean; // if there is space for new cmd
+begin
+  Result := false;
+  if nWaiting<(Asize-1) then Result := true;  //the useful maximum capacity is Asize-1 (at full, one index is unsued)
+end;
+
+//****************************************************
+
+constructor TFlowDevicesListThreadSafe.Create;
+begin
+  inherited create(10000);
+  fTimeStamp := Now;
+end;
+
+
+destructor TFlowDevicesListThreadSafe.Destroy;
+begin
+  inherited;
+end;
+
+procedure TFlowDevicesListThreadSafe.ClearAll(lockit: boolean = true);
+begin
+  if lockit then lock;
+    fTimeStamp := Now;
+    setlength( devslist, 0 );
+  if lockit then unlock;
+end;
+
+
+procedure TFlowDevicesListThreadSafe.AddDev(dev: TFlowDevices; id: byte; lockit: boolean = true);
+Var
+ ndevs: integer;
+begin
+  if lockit then lock;
+  ndevs := length( devslist) + 1;
+  setlength( devslist, ndevs );
+  devslist[ndevs-1] := dev;
+  devsid[dev] := id;
+  fTimeStamp := Now;
+  if lockit then unlock;
+end;
+
+function TFlowDevicesListThreadSafe.GetDev(i: byte; Var dev: TFlowDevices; Var id: byte; lockit: boolean = true): boolean;  //returns true if OK
+begin
+  Result := false;
+  if lockit then lock;
+  if not( (i>=0) and (i<Length(devslist)) ) then exit;
+  dev := devslist[i];
+  id := devsid[dev];
+  Result := true;
+  if lockit then unlock;
+end;
+
+
+function TFlowDevicesListThreadSafe.GetCount: longint;
+begin
+  lock;
+    Result := Length( devslist );
+  unlock;
+end;
+
+function  TFlowDevicesListThreadSafe.GetCountNoLock: longint;
+begin
+  Result := Length( devslist );
+end;
+
+function TFlowDevicesListThreadSafe.GetTimestamp: TDateTime;
+begin
+  lock;
+    Result := fTimestamp;
+  unlock;
+end;
+
+
+{procedure TFlowDevicesListThreadSafe.GetAquireNames(Var sl: TStringlist); //creates copy
+Var
+  i: integer;
+begin
+  if sl=nil then exit;
+  lock;
+    sl.Clear;
+    for i:=0 to faquireNames.Count -1 do sl.Add( faquireNames.Strings[i] );
+  unlock;
+end;
+}
+
+{
+procedure TFlowDevicesListThreadSafe.GetName(index: longint): string;  //returns empty string if error
+Var
+  c: integer;
+begin
+  Result := '';
+  lock;
+    c := faquireNames.Count -1;
+    if (index>0) and (index<=c) then Result := faquireNames.Strings[index];
+  unlock;
+end;
+}
+
+
+//****************************************************
+
+
+
+
+
+function AlicatGasStrToType( gas: string ): TFlowGasType;
+begin
+  Result := CGasUnknown;
+  if gas='N2' then Result := CGasN2;
+  if gas='O2' then Result := CGasO2;
+  if gas='H2' then Result := CGasH2;
+  if gas='Air' then Result := CGasAir;
+  if gas='CO' then Result := CGasCO;
+  if gas='Ar' then Result := CGasAr;
+  if gas='He' then Result := CGasHe;
+end;
+
+
+function AlicateRecStatusToStr( rec: TALicatFlowCtrlRec ): string;
+begin
+  if rec.enabled = false then
+    begin
+      Result := 'Disabled.';
+      exit;
+    end;
+  Result := 'Addr: ' + IntToStr(rec.d) + ' Range ' + FloatToStr( rec.minSccm) + ':' + FloatToStr( rec.maxSccm) ;
+end;
+
+
+function AlicatGasIdToGasType(gasid: byte): TFlowGasType;
+//Gas codes (new alicat) 15.2.2016 MV:
+//6=H2
+//0=Air
+//1=Ar
+//7=He
+//8=N2
+//11=O2
+begin
+  Result := CGasUnknown;
+  case gasid of
+    8: Result :=  CGasN2;
+    6: Result :=  CGasH2;
+    11: Result := CGasO2;
+    0: Result :=   CGasAir;
+    7: Result := CGasHe;
+    1: Result :=  CGasAr;
+  end;
+end;
+
+
+function AlicatGasTypeToAlicatGasId(gastype: TFlowGasType): byte;
+//Gas codes (new alicat) 15.2.2016 MV:
+//6=H2
+//0=Air
+//1=Ar
+//7=He
+//8=N2
+//11=O2
+begin
+  Result := 0;
+  case gastype of
+    CGasN2: Result := 8;
+    CGasH2: Result := 6;
+    CGasO2: Result := 11;
+    CGasCO: Result := 6;
+    CGasAir: Result := 0;
+    CGasHe: Result := 7;
+    CGasAr: Result := 1;
+  end;
+
+end;
+
+
+
+
+end.

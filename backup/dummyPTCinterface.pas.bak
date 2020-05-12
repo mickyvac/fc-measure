@@ -1,0 +1,246 @@
+unit dummyPTCinterface;
+
+{$IFDEF FPC}  //for compatibility between delphi  and lazarus
+{$mode delphi}
+{$ENDIF}
+
+interface
+
+uses
+  Classes, SysUtils, StdCtrls, Dialogs,
+  myutils, Logger,
+  HWAbstractDevices;
+
+{create descendant of virtual abstract potentio object and define its methods
+especially including definition of configuration and setup methods}
+
+Const
+  CDummyPTCVer = 'DummyPTC 2015-07-27';
+  CDummyPTCVerLong = CDummyPTCVer + ' interface (by Michal Vaclavu)';
+  CIntRezist = 0.100;
+  COpenVolt = 1.1;
+  CTafelSlope = 0.07;
+  CTafelI0 = 0.002;
+  CCrossover = 0.001;
+
+
+Type
+
+  TDummyPotentio = class (TPotentiostatObject)
+    public
+    //inherited virtual functions - must override!
+      function GetNameStr: string; override;
+      function IsDummy: boolean; override;
+      function IsReady: boolean; override;
+      function Initialize: boolean; override;
+      procedure Finalize; override;
+      function GetLastMsg: string; override;
+      //basic control functions
+      function GetDataStatus(Var rec: TPotentioRec; Var Status: TPotentioStatus): boolean; override;
+      function SetCC( val: double): boolean; override;
+      function SetCV( val: double): boolean; override;
+      function TurnLoadON: boolean; override;
+      function TurnLoadOFF: boolean; override;
+    private
+    //---- private variables declaration
+      PTCmode: TPotentioMode;
+      relayisON: boolean;
+      initialized: boolean;
+      lastsetpoint: double;
+      setpI: double;
+      setpU: double;
+      function simulU(i: double): double;
+      function simulI(u: double): double;
+      procedure msg(s: string); //log msg
+    //*************************
+  end;
+
+
+
+
+Implementation
+
+uses Math;
+
+
+function TDummyPotentio.GetNameStr: string;
+begin
+  Result := CDummyPTCVer;
+end;
+
+function TDummyPotentio.IsDummy: boolean;
+begin
+  Result := TRUE;
+end;
+
+function TDummyPotentio.IsReady: boolean;
+begin
+  Result := initialized;
+end;
+
+
+function TDummyPotentio.Initialize: boolean;
+begin
+  Result := true;
+  initialized := true;
+  TurnLoadOFF;
+  SetCC(0);
+  msg('Connect: Connected to DummyPTC!!!' );
+  msg('Connect: Id str: ' + CDummyPTCVerLong );
+
+end;
+
+
+procedure TDummyPotentio.Finalize;
+begin
+   initialized := false;
+end;
+
+
+function TDummyPotentio.GetLastMsg: string;
+begin
+  Result := 'Dummy says: OK';
+end;
+
+
+//basic control functions
+function TDummyPotentio.GetDataStatus(Var rec: TPotentioRec; Var Status: TPotentioStatus): boolean;
+begin
+    Result := false;
+    Status.isError := true;
+    rec.timestamp := Now;
+    rec.U := NaN;
+    rec.I := NaN;
+    rec.P := NaN;
+    rec.Uref := NaN;
+    if not initialized then exit;
+    //
+    rec.Uref := 0;
+    if PTCmode=CPotCC then
+          begin
+          rec.I := setpI;
+          if not relayisON then rec.I := 0;
+          rec.U := simulU(setpI);
+          end
+    else if PTCmode=CPotCV then
+          begin
+          rec.U := setpU;
+          if not relayisON then rec.U := COpenVolt;
+          rec.I := simulI(setpU);
+          end
+    else
+            begin
+            rec.I := 0.;
+            rec.U := 0.;
+            end;
+    with Status do
+    begin
+       isError := false;
+       mode := PTCmode;
+       setpoint := lastsetpoint;
+       isError := false;
+       isLoadConnected := relayisON;
+    end;
+   Result := true;
+end;
+
+
+
+function TDummyPotentio.SetCC( val: double): boolean;
+begin
+  PTCmode := CPotCC;
+  setpI := val;
+  lastsetpoint := setpI;
+  Result := true;
+end;
+
+
+function TDummyPotentio.SetCV( val: double): boolean;
+begin
+  PTCmode := CPotCV;
+  setpU := val;
+  lastsetpoint := setpU;
+  Result := true;
+end;
+
+
+function TDummyPotentio.TurnLoadON: boolean;
+begin
+  relayisON := true;
+  Result := true;
+end;
+
+
+function TDummyPotentio.TurnLoadOFF: boolean;
+begin
+  relayisON := false;
+  Result := true;
+end;
+
+
+
+function TDummyPotentio.simulU(i: double): double;
+Var
+  ix, U, DUTafel: double;
+  {COpenVolt = 1.1;
+  CTafelSlope = 0.07;
+  CTafelI0 = 0.002;
+  CCrossover = 0.001;
+  }
+begin
+  Result := COpenVolt;
+  if not initialized or not relayisON then exit;
+
+  ix := i + CCrossover;
+  if ix <= CTafelI0 then DUTafel := 0
+  else
+    DUTafel := CTafelSlope * log10( ix / CTafelI0);
+  U := COpenVolt - i * CIntRezist - DUTafel;
+  if relayisON then Result := U
+end;
+
+
+function TDummyPotentio.simulI(u: double): double;
+Var
+  dUtot, ix, ux, I, DUTafel: double;
+  b: boolean;
+  epsilon: double;
+  {COpenVolt = 1.1;
+  CTafelSlope = 0.07;
+  CTafelI0 = 0.002;
+  CCrossover = 0.001;
+  }
+begin
+  Result := 0.;
+  dUtot := COpenVolt - u;
+  epsilon := 0.01;
+  ux := simulU( CTafelI0 );
+  if not relayisON or not initialized then
+  begin
+    Result := 0.;
+    exit;
+  end;
+  if u>ux then
+   begin
+     Result := DUtot / CIntRezist;
+     exit;
+   end;
+  ix := CTafelI0;
+  ux := simulU( CTafelI0 );
+  while (ux > u) and (ux>0) do
+  begin
+    ix := ix * 1.01;
+    ux := simulU( ix );
+    if ix>100 then break;
+  end;
+  Result := ix;
+end;
+
+
+procedure TDummyPotentio.msg(s: string); //set lastmsg and log it at the same time
+begin
+  logmsg('DummyPTC: '+ s);
+end;
+
+
+end.

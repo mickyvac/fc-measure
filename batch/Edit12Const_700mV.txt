@@ -1,0 +1,4 @@
+[LinearBatch Acquisition File]
+
+Maximalni Vykon [mW]	Odpovídající proud [mA]	Odpovídající napìtí [V]	Maximální nestabilita [mA]	pøi proudu [mA]
+0	0	0	0	0

@@ -1,0 +1,638 @@
+unit KolPTCInterface;
+
+{note 19.7.2015 - changes in interdace - ptc.dll
+v podstate jsem zrušil funkci Setup, sice funguje, ale jen docasne
+Ptc_Setup(Feedback:integer; OutputRelayOn:boolean):boolean;
+
+Na rízení jsou ted navrženy tyto funkce:
+
+Function Ptc_Range(Range:integer):boolean; stdcall;
+Function Ptc_Feedback(Feedback:integer):boolean; stdcall;
+Function Ptc_Setpoint(Setpoint:double):boolean; stdcall;
+Function Ptc_OutputEnabled(enabled:boolean):boolean; stdcall;
+
+Range: 0=snímací odpor 10mOhm, 15A, 1=odpor 1 Ohm, cca do 100mA
+Feedback: softwarový feedback, od nuly postupne V2, V4, VRef, I, Ix10
+Setpoint: pro sw feedback
+OutputEnabled: pripopojí nebo odpojí výstup (ovládá relé)
+
+}
+
+
+{$IFDEF FPC}  //for compatibility between delphi  and lazarus
+{$mode delphi}
+{$ENDIF}
+
+interface
+
+uses
+  Classes, SysUtils, StdCtrls, Dialogs,
+  myutils, Logger,
+  HWAbstractDevices,
+  Ptc_defines;
+
+{create descendant of virtual abstract potentio object and define its methods
+especially including definition of configuration and setup methods}
+
+Const
+  CPtcIfaceVer = 'KolPTC Interface 2015-07-27';
+  CPtcIfaceVerLong = 'KolPTC Interface 2015-07-27 (Michal Vaclavu)';
+
+Type
+
+  TKolPTCFeedback = (CPTCFbV2, CPTCFbV4, CPTCFbVref, CPTCFbI, CPTCFbIx10);
+  TKolPTCRange = (CPTCRng500mA, CPTCRng15A );
+
+
+  TKolPTCPotentio = class (TPotentiostatObject)
+    public
+    //inherited virtual functions - must override!
+      function GetNameStr: string; override;
+      function IsDummy: boolean; override;
+      function isReady: boolean; override;
+      function Initialize: boolean; override;
+      function GetLastMsg: string; override;
+      //basic control functions
+      function GetDataStatus(Var rec: TPotentioRec; Var Status: TPotentioStatus): boolean; override;
+      function SetCC( val: double): boolean; override;
+      function SetCV( val: double): boolean; override;
+      function TurnLoadON: boolean; override;
+      function TurnLoadOFF: boolean;
+    public
+      //additional features
+      //function PotentioSetup(port:string; baud: longint): boolean;
+      //special setup - added after 19.7.2015
+      function IsAvailable: boolean;
+      procedure Disconnect;
+      procedure ResetFuses;
+      function SetCCx( val: double; forceturnon: boolean = false; forcechangefb: boolean = false): boolean;
+      function SetCVx( val: double; forceturnon: boolean = false; forcechangefb: boolean = false): boolean;
+      procedure SetFBsource( fb: TKolPTCFeedback );
+      function GetFBsource(): TKolPTCFeedback;
+      procedure SetRange( r: TKolPTCRange );
+      function GetRange(): TKolPTCRange;
+      procedure SetSetpoint( sp: double );
+      function GetLastSp(): double;
+      procedure SetAutoSwitchRange ( b: boolean );
+      function GetAutoSwitchRange: boolean;
+      function GetDataBuffered(Var Rec: TPotentioRec; Var Status: TPotentioStatus): boolean;
+      procedure GetRawChannels(Var in1, in2, in3, in4, in5, in6, ou1, ou2, ou3: double);
+      procedure ExitDll;
+      function GetHWIdstr: string;
+
+    private
+      Ready: boolean;
+      relayisON: boolean;
+      actFB: TKolPTCFeedback;
+      actRange: TKolPTCRange;
+      AUTOSwitchrng : boolean;
+      lastmode: TPotentioMode;
+      lastUfeedback: TKolPTCFeedback;
+      lastIfeedback: TKolPTCFeedback;
+      lastrange: TKolPTCRange;
+      lastsetp: double;
+      lastres: boolean;
+      lastmsg: string;
+      bufferedread: boolean;
+      PtcInfo: TPtcInfo;
+      function FBtoInternal(fb:TKolPTCFeedback): integer;
+      function RngToInternal(r: TKolPTCRange): integer;
+      procedure msg(s: string); //set lastmsg and log it at the same time
+  end; //*************************
+
+
+Var
+ PTCdebug: boolean;  //DEBUG!!!!!!!!!!!
+
+
+
+Implementation
+
+uses Math;
+
+
+
+const
+    PTC_DLL_Name = 'Ptc.dll';
+
+Procedure Ptc_Exit; stdcall; external PTC_DLL_Name name 'Ptc_Exit';
+Function Ptc_IsConnected:boolean; stdcall; external PTC_DLL_Name name 'Ptc_IsConnected';
+Function Ptc_GetInfo(info:PPtcInfo):boolean; stdcall; external PTC_DLL_Name name 'Ptc_GetInfo';
+Function Ptc_GetAinAout(AinBuffer:PDouble; AoutBuffer:PDouble):boolean; stdcall; external PTC_DLL_Name name 'Ptc_GetAinAout';
+Function Ptc_GetAinAout_Buffered(AinBuffer:PDouble; AoutBuffer:PDouble):boolean; stdcall; external PTC_DLL_Name name 'Ptc_GetAinAout_Buffered';
+//obsolete //Function Ptc_Setup(Feedback:integer; OutputRelayOn:boolean):boolean; stdcall; external PTC_DLL_Name name 'Ptc_Setup';
+Function Ptc_SetAout(index:integer; count:integer; AoutBuffer:PDouble):boolean; stdcall; external PTC_DLL_Name name 'Ptc_SetAout';
+{added 19.7.2015}
+Function Ptc_Range(Range:integer):boolean; stdcall; external PTC_DLL_Name name 'Ptc_Range';
+Function Ptc_Feedback(Feedback:integer):boolean; stdcall; external PTC_DLL_Name name 'Ptc_Feedback';
+Function Ptc_Setpoint(Setpoint:double):boolean; stdcall; external PTC_DLL_Name name 'Ptc_Setpoint';
+Function Ptc_OutputEnabled(enabled:boolean):boolean; stdcall; external PTC_DLL_Name name 'Ptc_OutputEnabled';
+Function Ptc_ResetFuse:boolean; stdcall; external PTC_DLL_Name name 'Ptc_ResetFuse';
+
+{
+ SAFE is to call anytime only "ptc_isconnected"!!!
+ if not connecetd, calling other function causes undefined state and errors (memory leaks and so on)
+}
+
+//Ptc_Exit; //call Ptc_exit onyl when cloasing app - bacause it will kill
+            //dll background app, and only way to get it back is restart application (reload dll)
+            //so for that there is new method exitDll
+
+{
+PTC setup details
+  Range: 0=snímací odpor 10mOhm, 15A, 1=odpor 1 Ohm, cca do 100mA
+  Feedback: softwarový feedback, od nuly postupne V2, V4, VRef, I, Ix10
+}
+
+Const
+    CKolPTCRangeR10mOhm = 0;
+    CKolPTCRangeR1Ohm = 1;
+
+    CKolPTCFeedbackV2 = 0;
+    CKolPTCFeedbackV4 = 1;
+    CKolPTCFeedbackVRef = 2;
+    CKolPTCFeedbackI = 3;
+    CKolPTCFeedbackIx10 = 4;
+
+//function TKolPTCPotentio.PotentioSetup(port:string; baud: longint): boolean;
+//begin
+//end;
+
+
+function TKolPTCPotentio.GetNameStr: string;
+begin
+  Result := CPtcIfaceVer;
+end;
+
+
+function TKolPTCPotentio.isReady: boolean;
+begin
+  Result := isReady;
+end;
+
+function TKolPTCPotentio.IsDummy: boolean;
+begin
+  Result := false;
+end;
+
+
+
+function TKolPTCPotentio.Initialize: boolean;
+{19.7.2015: Zahájení muže vypadat tak, že nastavíš range, feedback a setpoint a pak povolíš výstup a on najede sám.
+Feedback lze na chodu zmenit, setpoint se tam automaticky zmení taky tak, aby se "nic nestalo".
+}
+begin
+  Result := false;
+  lastres := false;
+  Ready := false;
+  bufferedread := false;
+  lastmode:= CPotCC;
+  lastUfeedback:= CPTCFbV4;
+  lastIfeedback:= CPTCFbI;
+  lastrange:= CPTCRng15A;
+  lastsetp := 0.0;
+  actFB := CPTCFbI;
+  actRange := CPTCRng15A;
+
+  if not Ptc_IsConnected then
+  begin
+    msg('Connect: KolPTC not available');
+    exit;
+  end;
+  //force initial state
+  //update present settings
+  TurnLoadOFF;
+  SetRange( CPTCRng15A );
+  SetFBsource( CPTCFbI );
+  SetSetpoint( 0.0 );
+  //done
+  msg('Connect: Connected to kolPTC!!! This is ' + CPtcIfaceVerLong );
+  msg('Connect: HW info: ' + GetHWIdstr );
+  msg('Connect: KolPTC OK & ready');
+  Ready := true;
+  Result := true;
+end;
+
+
+procedure TKolPTCPotentio.Disconnect;
+begin
+  msg('Disconnecting PTC');
+  TurnLoadOFF;
+  Ready := false;
+  //Ptc_Exit; //call Ptc_exit onyl when cloasing app - bacause it will kill
+              //dll background app, and only way to get it back is restart application (reload dll)
+              //so for that there is new method exitDll
+end;
+
+function TKolPTCPotentio.GetLastMsg: string;
+begin
+  Result := lastmsg;
+end;
+
+
+//basic control functions
+function TKolPTCPotentio.GetDataStatus(Var rec: TPotentioRec; Var Status: TPotentioStatus): boolean;
+//description of inputs "ain":  in this order   V2/V4/Vref/old I/old Ix10/ newI
+
+Var
+    ain, aout: array of double;
+    U2raw, U4raw, Urefraw, Iraw, Setpraw: double;
+    Ifin, Ufin: double;
+    b : boolean;
+begin
+    Result := false;
+    Status.isError := true;
+    rec.timestamp := Now;
+    rec.U := NaN;
+    rec.I := NaN;
+    rec.P := NaN;
+    rec.Uref := NaN;
+    if not Ptc_IsConnected then
+    begin
+      msg('GetData: PTC not available');
+      exit;
+    end;
+    b := Ptc_GetInfo( @PtcInfo );
+    if not b then
+    begin
+      msg('GetData: PTCInfo: failed');
+      exit;
+    end;
+    //prepare buffer
+    SetLength(ain, PTCinfo.ainCount);                                    //prepare buffers
+    SetLength(aout, PTCinfo.aoutCount);
+{$R-}
+    if bufferedread then
+        b := Ptc_GetAinAout_Buffered(@ain[0], @aout[0])                    //read actual known values
+    else
+        b := Ptc_GetAinAout(@ain[0], @aout[0]);                            //read values directly from xADDA
+{$R+}
+    if not b then
+    begin
+      msg('GetData: GetAinAout failed');
+      exit;
+    end;
+    //ain0:  V2
+    //ain1: V4
+    //ain2: Vref
+    //ain5: I
+    //aout0: setpoint
+    Iraw := ain[5];
+    //U2raw := ain[0];
+    U4raw := ain[1];
+    Urefraw := ain[2];
+    //SetpRaw := aout[0];
+    //process U, I
+    Ufin := U4raw;
+    Ifin := Iraw;
+    with rec do
+    begin
+        timestamp := Now;
+        U := Ufin;
+        I := Ifin;
+        P := Ufin * Ifin;
+        Uref := Urefraw;
+   end;
+   with status do
+    begin
+       isError := false;
+       mode := lastmode;
+       setpoint := lastsetp;
+       isLoadConnected := relayisON;
+    end;
+   lastmsg := 'GetData OK.';
+   Result := true;
+end;
+
+
+function TKolPTCPotentio.GetDataBuffered(Var Rec: TPotentioRec; Var Status: TPotentioStatus): boolean;
+Var
+  oldb: boolean;
+begin
+  oldb := bufferedread;
+  bufferedread := true;
+  Result := GetDataStatus(Rec, Status);
+  bufferedread := oldb;
+end;
+
+
+procedure TKolPTCPotentio.GetRawChannels(Var in1, in2, in3, in4, in5, in6, ou1, ou2, ou3: double);
+Var
+    ain, aout: array of double;
+    b : boolean;
+begin
+  in1 := NAN;
+  in2 := NAN;
+  in3 := NAN;
+  in4 := NAN;
+  in5 := NAN;
+  in6 := NAN;
+  ou1 := NAN;
+  ou2 := NAN;
+  ou3 := NAN;
+  if not Ptc_IsConnected then
+  begin
+   msg('GetRawChennelsData: PTC not available');
+   exit;
+  end;
+  b := Ptc_GetInfo( @PtcInfo );
+  if not b then
+  begin
+    msg('GetRawChannelsData: PTCInfo: failed');
+    exit;
+  end;
+  //do buffered read
+  SetLength(ain, PTCinfo.ainCount);  //prepare buffers
+  SetLength(aout, PTCinfo.aoutCount);
+{$R-}
+  b := Ptc_GetAinAout_Buffered(@ain[0], @aout[0]);    //read last known values
+{$R+}
+  if not b then
+  begin
+    msg('GetRawChannelsData: GetAinAout failed');
+    exit;
+  end;
+  //assert( PTCinfo.ainCount >= 4 );
+  //assert(  PTCinfo.aoutCount >=3 );
+  in1 := ain[0];
+  in2 := ain[1];
+  in3 := ain[2];
+  in4 := ain[3];
+  in5 := ain[4];
+  in6 := ain[5];
+  ou1 := aout[0];
+  ou2 := aout[1];
+  ou3 := aout[2];
+end;
+
+
+
+
+
+function TKolPTCPotentio.SetCC( val: double): boolean;
+begin
+  Result :=  SetCCx( val);
+end;
+
+
+function TKolPTCPotentio.SetCCx( val: double; forceturnon: boolean = false; forcechangefb: boolean = false): boolean;
+// TODO: turning on the connection to Load
+//TODO:  check status for correct sequence, consider turnoff for changing from voltage
+Var
+  Icoef, newsetp: double;
+  b, b2, res: boolean;
+begin
+  if not Ptc_IsConnected then
+  begin
+   msg('SetCC: PTC not available');
+   exit;
+  end;
+  //new setpoint if correction needed
+  Icoef := 1.0; //Icoef := 0.1;    //TODO: !!!!
+  newsetp := val * ICoef;
+  //check mode
+  if (lastmode<>CpoTCC) or forcechangefb then //need switch fb
+    begin
+    b2 := Ptc_Feedback( FBToInternal( lastIfeedback ) );
+    actFB :=  lastIfeedback;
+   //TODO: WAIt for fb stabil!!!!!!!!!
+    end;
+  if not b2 then
+      begin
+       msg('SetCC: setFB failed');
+       exit;
+      end;
+  if b2 then lastmode := CpotCC;
+  b := Ptc_Setpoint(newsetp);
+  if not b then msg('SetCV: setsetpoiont failed');
+  res := b and b2;
+  if res then lastsetp := newsetp
+  else msg('setCC: new sp: failed');
+  Result := res;
+end;
+
+
+function TKolPTCPotentio.SetCV( val: double): boolean;
+begin
+  Result :=  SetCVx( val);
+end;
+
+
+function TKolPTCPotentio.SetCVx( val: double; forceturnon: boolean = false; forcechangefb: boolean = false): boolean;
+// TODO: consider also turning on load
+//TODO:  check status for correct sequence, consider turnoff for changing from voltage
+Var
+  Vcoef, newsetp: double;
+  b, b2, res: boolean;
+begin
+  if not Ptc_IsConnected then
+  begin
+   msg('SetCV: PTC not available');
+   exit;
+  end;
+  //new setp
+  Vcoef := 1.;    //TODO: !!!!
+  newsetp := val * VCoef;
+  //check mode
+  if (lastmode<>CpoTCV) or forcechangefb then //need switch fb
+    begin
+    b2 := Ptc_Feedback( FBToInternal( lastUfeedback ) );
+    actFB :=  lastUfeedback;
+   //TODO: WAIt for fb stabil!!!!!!!!!
+    end;
+  if b2 then lastmode := CpotCV;
+  if not b2 then
+      begin
+       msg('SetCV: setFB failed');
+       exit;
+      end;
+  b := Ptc_Setpoint(newsetp);
+  if not b then msg('SetCV: setsetpoiont failed');
+  res := b and b2;
+  if res then lastsetp := newsetp
+  else msg('setCV: new sp: failed');
+  Result := res;
+end;
+
+
+function TKolPTCPotentio.TurnLOADON: boolean;
+Var
+  b: boolean;
+begin
+  if not Ptc_IsConnected then
+  begin
+   msg('TurnOn: PTC not available');
+   exit;
+  end;
+  b := Ptc_OutputEnabled( true );
+  if b then relayisON := true
+  else
+  begin
+    relayisON := false;   //forcing OFF state status although the real state is now unknown
+    msg('Turn on: failed');
+  end;
+  Result := b;
+end;
+
+
+function TKolPTCPotentio.TurnLOADOFF: boolean;
+Var
+  b: boolean;
+begin
+  if not Ptc_IsConnected then
+  begin
+   msg('Turnoff: PTC not available');
+   exit;
+  end;
+  b := Ptc_OutputEnabled( false );
+  if not b then  msg('Turn oFF: failed');
+  if b then relayisON := false;
+  Result := b;
+end;
+
+
+
+function TKolPTCPotentio.GetHWIdStr: string;
+var
+   b : boolean;
+begin
+    if not Ptc_IsConnected then
+    begin
+      msg('GetHwId: PTC not available');
+      Result := lastmsg;
+      exit;
+    end;
+    b := Ptc_GetInfo( @PtcInfo );
+    if not b then
+    begin
+      msg('GetHWIDStr: PTCInfo: failed');
+      Result := lastmsg;
+      exit;
+    end;
+  Result := 'KolPTC | Firmware: ' +  string(PTCinfo.fw)+ ' | Vendor: ' + string(PTCinfo.fwVendor) + ' | Version: '+ string(PTCinfo.fwVersion);
+end;
+
+
+function TKolPTCPotentio.IsAvailable: boolean;
+begin
+  Result := Ptc_IsConnected;
+end;
+
+
+procedure TKolPTCPotentio.ResetFuses;
+Var
+  b: boolean;
+begin
+  if not Ptc_IsConnected then
+  begin
+   msg('ResetFuses: PTC not available');
+   exit;
+  end;
+  b := Ptc_ResetFuse;
+  if not b then msg('Reset fuse: failed');
+end;
+
+
+procedure TKolPTCPotentio.SetFBsource( fb: TKolPTCFeedback );
+Var
+  b: boolean;
+begin
+  if not Ptc_IsConnected then
+  begin
+   msg('SetFB: PTC not available');
+   exit;
+  end;
+  b := Ptc_Feedback( FBtointernal(fb) );
+  if not b then msg('SetFeedback: failed');
+  if b then actFB := fb;
+end;
+
+function TKolPTCPotentio.GetFBsource(): TKolPTCFeedback;
+begin
+  Result := actFB;
+end;
+
+procedure TKolPTCPotentio.SetRange( r: TKolPTCRange );
+Var
+  b: boolean;
+begin
+  if not Ptc_IsConnected then
+  begin
+   msg('SetRng: PTC not available');
+   exit;
+  end;
+  b := Ptc_Range( Rngtointernal(r) );
+  if not b then msg('SetRange: failed');
+  if b then actRange := r;
+end;
+
+function TKolPTCPotentio.GetRange(): TKolPTCRange;
+begin
+  Result := actRange;
+end;
+
+procedure TKolPTCPotentio.SetSetpoint( sp: double );
+Var
+  b: boolean;
+begin
+  if not Ptc_IsConnected then
+  begin
+   msg('SetSetpoint: PTC not available');
+   exit;
+  end;
+  b := Ptc_Setpoint(sp );
+  if not b then msg('SetSetpoint: failed');
+  if b then lastsetp := sp;
+end;
+
+function TKolPTCPotentio.GetLastSp(): double;
+begin
+  Result := lastsetp;
+end;
+
+procedure TKolPTCPotentio.SetAutoSwitchRange ( b: boolean );
+begin
+  AUTOSwitchrng := b;
+end;
+
+function TKolPTCPotentio.GetAutoSwitchRange: boolean;
+begin
+  Result := AUTOSwitchrng;
+end;
+
+
+procedure TKolPTCPotentio.ExitDll;
+begin
+  msg('Calling ptc_exit');
+  Ptc_Exit;
+end;
+
+
+
+function TKolPTCPotentio.FBtoInternal(fb:TKolPTCFeedback): integer;
+begin
+  Result:= 0;
+  if fb=CPTCFbV2 then Result:= CKolPTCFeedbackV2
+  else if fb=CPTCFbV4 then Result:= CKolPTCFeedbackV4
+  else if fb=CPTCFbVref  then Result:= CKolPTCFeedbackVRef
+  else if fb=CPTCFbI then Result:= CKolPTCFeedbackI
+  else if fb=CPTCFbIx10 then Result:= CKolPTCFeedbackIx10;
+end;
+
+function TKolPTCPotentio.RngtoInternal(r: TKolPTCRange): integer;
+begin
+  Result:= 0;
+  if r=CPTCRng15A then Result:= CKolPTCRangeR10mOhm
+  else if r=CPTCRng500mA then Result:= CKolPTCRangeR1Ohm;
+end;
+
+procedure TKolPTCPotentio.msg(s: string); //set lastmsg and log it at the same time
+begin
+  lastmsg := 'KolPTC: '+ s;
+  logmsg(lastmsg);
+end;
+
+
+
+
+end.

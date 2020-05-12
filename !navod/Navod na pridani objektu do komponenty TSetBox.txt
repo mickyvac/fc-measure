@@ -1,0 +1,15 @@
+Pøidávání prvku do komponenty TSetBlock:
+
+Mluvim o souboru SetBlock.pas
+
+1) Prvek pøidám do deklarace nejlepe pod komentar "Objects of componet".
+
+2) Pridám prvkëk i do konstruktoru komponenty TSetBlock (pochopitelne) podle vzoru, který tam nejdes¨š.
+
+3) Vytvoøíme pøípadné "Propety" v pblished èásti deklarace. Deklarujeme i read a write funkce a definujeme je. Property použijeme pokud chceme nastavovat hodnoty i z object inspektoru v proetøedí delfi. Lze i write funkci vyuzit k osetreni vstupu. A podobne read proceduru k detekci ètení (nevím, kde bych to teï použil). Budeme tedy potøebovat ještì nìjakou další privátní promìnou "Private_", do které budeme zapisovat a èíst metodami write a read. Pokud nový prvek je TEdit, tak nová privátní promìná bude asi tøeba string kam se uloží text editu.
+
+4) Vytvoøím OnChange funkci pro tento prvek. Pøiøadím jí tomuto prvku v proceduøe "TSetBlock.SetComponentToDefault". Pøi každé zmìne tohot editu dojde k  tøeba k uložení textu do promìné. I na této úrovni mùže dojít ke kontrolování vstupu. A hlavnì zde bude také volání OnChange pro celou komponentu.
+
+5) Initializujeme prvek v procedure "TSetBlock.SetComponentToDefault". V "TSetBlock.SetComponentToDefault" pøiøadím prvku i OnClick a OnDblClick, OnEnter, OnKeyDown a podobnì pokud lze.
+
+6) Ve stejné procedure nastavíme grafické vlastnosti prvku vèetnì poloh a výšek. Šíøka se bude nastavovat automaticky podle rozmìru celé komponenty. 

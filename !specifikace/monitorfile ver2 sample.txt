@@ -1,0 +1,5 @@
+#monitorfile ver2
+#start timestamp: 42506,7024815625 date: 16.5.2016
+Time_from_start[ms]	Temp[degC]	Current[A.cm-2]	Voltage[V]	Power[W.cm-2]	FullTime	Uref[V]	debugmsg	FlowData(sccm,bar)
+
+17985	NAN	-7.945106E-05	0.9556685	-7.592887E-05	(2016.05.16_16:51:52)	-0.001814506	Output=0|HWFuse=0|SWLim=0|Mode=0|setp=0,00|Ain=[0,956;0,956;-0,002;0,000;0,002;0,000]|Aout=[-0,977;0,000;0,000;0,000]	MFA=(F=100_SP=100_p=2.344_T=26.5_Gas=H2)MFN=(F=10_SP=10_p=4.61_T=27.1_Gas=N2)MFC=(F=80.1_SP=80_p=4.507_T=27.2_Gas=O2)MFR=(F=0_SP=0_p=2.345_T=25.5_Gas=H2)	pA=0.496;pC=0.512;pP=8;TbH=61.7;TbO=49.8;TcT=70.6;TcB=70.6;

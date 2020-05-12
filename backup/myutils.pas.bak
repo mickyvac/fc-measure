@@ -1,0 +1,155 @@
+unit myutils;
+
+interface
+
+uses Classes;
+
+
+function Min(a, b: real): real;
+function Max(a, b: real): real;
+
+function mymin(a, b: double): double; //expect NAN value possible
+function mymax(a, b: double): double; //expect NAN value possible
+
+
+procedure DelayMS( d:longint );
+
+function Backslash: string;
+
+function AddLeadingZeroes(const aNumber: longint; const  Length : integer) : string;
+function DateNowToStr: string;
+function MyTrim(s: string): string;
+
+
+function MakeSureDirExist( path: string ): boolean;
+
+//procedure IncText( Var t: string);
+
+
+procedure GetSerialPortsOnSystem(var Strings: TStrings);
+{return list of strings contanining available com portr device on system
+maybe works OK only on Windows}
+
+
+implementation
+
+Uses DateUtils, SysUtils, StrUtils, Math;
+
+function Min(a, b: real): real;
+begin
+  Result := b;
+  if (a<=b) then Result := a;
+end;
+
+
+function Max(a, b: real): real;
+begin
+  Result := b;
+  if (a>=b) then Result := a;
+end;
+
+function mymin(a, b: double): double; //expect NAN value possible
+begin
+  Result := a;
+  if isnan(a) then Result := b
+  else if isnan(b) then Result := a
+  else
+    if (b<a) then Result := b;
+end;
+
+function mymax(a, b: double): double; //expect NAN value possible
+begin
+  Result := a;
+  if isnan(a) then Result := b
+  else if isnan(b) then Result := a
+  else
+    if (b>a) then Result := b;
+end;
+
+
+
+procedure DelayMS( d: longint );
+Var
+  n: TDateTime;
+  i: integer;
+begin
+    n := Now + d / 24/3600/1000;
+    while (Now < n) do i := 1;
+end;
+
+
+function AddLeadingZeroes(const aNumber: longint; const  Length : integer) : string;
+begin
+   result := SysUtils.Format('%.*d', [Length, aNumber]) ;
+end;
+
+
+function DateNowToStr: string;
+Var
+  format: TFormatSettings;
+  dat : TDateTime;
+begin
+  GetLocaleFormatSettings(0, format);
+  format.LongDateFormat := 'yyyy-mm-dd';
+  format.ShortDateFormat := 'yyyy-mm-dd';
+  format.ShortTimeFormat := '';
+  dat := Now;
+  Result := DateToStr(dat,format);
+end;
+
+function MyTrim(s: string): string;
+Var
+ s1, s2 :ansistring;
+begin
+  s1 := Trim(s);
+  s2 := AnsiReplaceStr(s1, '/', '');
+  s1 := s2;
+  s2 := AnsiReplaceStr(s1, '\', '');
+  s1 := s2;
+  s2 := AnsiReplaceStr(s1, '*', '');
+  s1 := s2;
+  s2 := AnsiReplaceStr(s1, '?', '');
+  s1 := s2;
+  s2 := AnsiReplaceStr(s1, '.', '');
+  s1 := s2;
+  Result := Trim(s1);
+end;
+
+
+function Backslash: string;
+begin
+  Result := '\';
+end;
+
+function MakeSureDirExist( path: string ): boolean;
+begin  //MkDir
+  Result := false;
+  {$I-}
+  if not DirectoryExists(path) then
+    begin
+      //create directory
+      if not CreateDir(path) then exit;
+    end;
+  if (IoResult <> 0) then  exit;
+  {$I+}
+  Result := true;
+end;
+
+procedure GetSerialPortsOnSystem(var Strings: TStrings);
+Var
+  listcom: string;
+  i: integer;
+begin
+{$IFDEF WINDOWS}
+  listcom := GetSerialPortNames;  //comma separated list
+  //
+  // ExtractStrings
+{$ENDIF}
+end;
+
+
+
+
+
+
+end.

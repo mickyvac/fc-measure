@@ -1,0 +1,97 @@
+unit HWAbstractDevices;
+
+interface
+
+uses
+  Classes;
+
+type
+
+// ***
+//common data structure definition
+//
+
+   TPotentioMode = (CPotCC, CPotCV, CPotCR, CPotCP, CPotERR);
+
+   TPotentioRec = record
+        timestamp: TDateTime;
+        U: double;
+        I: double;
+        P: double;
+        Uref: double;
+   end;
+
+   TPotentioStatus = record
+        isError: boolean;
+        //isWarning: boolean;
+        mode: TPotentioMode;
+        setpoint: double;
+        isLoadConnected: boolean;
+   end;
+
+
+   TPressureRec =  record
+        timestamp: TDateTime;
+        press: double;
+        end;
+
+   TFlowRec = record
+        timestamp: TDateTime;
+        flow:  double;
+        pressure: double;
+        temp: double;
+        end;
+
+   TValveRec  = record
+        timestamp: TDateTime;
+        isopen: boolean;
+        end;
+
+   TTempRec = record
+        timestamp: TDateTime;
+        temp: double;
+        end;
+
+
+//
+// definition of basic devices virtual objects
+//
+
+
+
+TPotentiostatObject = class
+  public
+    //setup,configuration of an actual device is defined for that device, because it is device-specific
+    function GetNameStr: string; virtual; abstract;   //report bavk short name or description of device
+    function IsDummy: boolean; virtual; abstract;      //returns TRUE if not REAL device
+    function IsReady: boolean; virtual; abstract;      //is ready to provide data otherwise will not have any effect
+    function Initialize: boolean; virtual; abstract;   //assuming the device is available and connected, try to set initial condition
+                                                       //without initialization, the device should not become ready
+    function GetLastMsg: string; virtual; abstract;    //if any function returns false as result(menaing error), this string result should contain showrt description of reason
+    //basic control functions
+    function GetDataStatus(Var rec: TPotentioRec; Var Status: TPotentioStatus): boolean; virtual; abstract;  //returns electrical DATA and status
+    function SetCC( val: double): boolean; virtual; abstract;   //constant current mode
+    function SetCV( val: double): boolean; virtual; abstract;   //constant voltage mode
+    function TurnLoadON: boolean; virtual; abstract;            //connect load to PTC
+    function TurnLoadOFF: boolean; virtual; abstract;           //disconnect LOAD (only voltage is monitored)
+end;
+
+
+
+ TPressureCtrlObject = class
+  public
+    function PressureConnect(port:string; baud: longint): boolean;  virtual; abstract;
+    procedure PressureDisconnect; virtual; abstract;
+  end;
+
+
+
+
+
+  
+implementation
+
+
+
+end.
+

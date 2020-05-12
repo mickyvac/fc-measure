@@ -1,0 +1,22 @@
+Ahoj,
+posílám specifikaci, resp. jen zmìny, nìjak nestíhám, k poèítaèi jsem se po Praze dostal až teï :-)
+
+v podstatì jsem zrušil funkci Setup, sice funguje, ale jen doèasnì
+Ptc_Setup(Feedback:integer; OutputRelayOn:boolean):boolean;
+
+Na øízení jsou teï navrženy tyto funkce:
+
+Function Ptc_Range(Range:integer):boolean; stdcall;
+Function Ptc_Feedback(Feedback:integer):boolean; stdcall;
+Function Ptc_Setpoint(Setpoint:double):boolean; stdcall;
+Function Ptc_OutputEnabled(enabled:boolean):boolean; stdcall;
+
+Range: 0=snímací odpor 10mOhm, 15A, 1=odpor 1 Ohm, cca do 100mA
+Feedback: softwarový feedback, od nuly postupnì V2, V4, VRef, I, Ix10
+Setpoint: pro sw feedback
+OutputEnabled: pøipopojí nebo odpojí výstup (ovládá relé)
+
+Zahájení mùže vypadat tak, že nastavíš range, feedback a setpoint a pak povolíš výstup a on najede sám.
+Feedback lze na chodu zmìnit, setpoint se tam automaticky zmìní taky tak, aby se "nic nestalo".
+
+V pondìlí to doladíme a otestujem, já sám jsem to ještì nezkoušel s PTC.

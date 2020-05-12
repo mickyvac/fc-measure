@@ -1,0 +1,11 @@
+MSwCtrl:  (fcs control controlled)
+          0 ok can control PTC
+          1 mus tstop controlling PTC -> response expected  in mmswstatus
+
+MSwStatus (my program writes)
+0: no action
+1: my program operates PTC - task in progress
+2: in response to request to stop work, this is to confirm, that my program stopped control
+!!! for every mswctrl transittion to 1 there must repsonse in mswstatus to 2
+
+       

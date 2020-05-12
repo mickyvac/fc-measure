@@ -1,0 +1,37 @@
+==================
+from main.pas
+=====================
+
+removed: (...o jakekoliv mereni a nacitani dat se staraji ted funkce v jinem modulu)
+{    function ChX():real;
+    function ChY():real;
+    function Teplota: real;
+    procedure SetDA1(val:real);
+    procedure SetDA2(val:real);
+    procedure RizeniProudem;
+    procedure RizeniNapetim;
+    procedure GetUI(var U, I: real); //vrati hodnoty po korekci na odpor privodu k zatezi
+}
+
+
+
+
+
+removed:
+  {Soubor pro zavyslost teploty na vykonu} //Uz asi jen z historickych duvodu
+  if (teplotnizavyslost)then
+    if(not FileExists(DataDir+'TeplotaNaVykonu.txt')) then
+    begin
+      AssignFile(output2, DataDir+'TeplotaNaVykonu.txt');
+      rewrite(output2);
+      Append(output2);
+      writeln(output2,'Závyslost teploty článku na výkonu článku');
+      writeln(output2,'Mereni provedeno: '+DateToStr(Date)+' '+TimeToStr(Time));
+      writeln(output2,'Teplota [°C]'+#9+'Výkon [W]'+#9+'Proud[A]'+#9+'Napeti[V]');
+    end else
+    begin
+      AssignFile(output2, DataPath()+'TeplotaNaVykonu.txt');
+      Append(output2);
+    end;
+
+

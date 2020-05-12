@@ -1,0 +1,499 @@
+unit hwinterface;
+{Last mod: 2014-11-13 MVac}
+{
+In this unit there should be list of declaration, which will be satisfied/defied 
+by including other corresponding units writteln for specific HW combination, for which
+the actual compilation should work.
+All the function prototypes are expected to rpovide basic high level access to the functions
+of the hw.
+From the gerneral point of devices, there is to be expected these cateories:  
+- Potenciostat/electronic load control
+- Gas flow control
+- Temperature/heaters monitoring and control
+}
+
+{$IFDEF FPC}  //for compatibility between delphi  and lazarus
+{$MODE Delphi}
+{$ENDIF}
+
+
+interface
+
+//***************************************
+//!!!!!!!!!!!!!!!!!!!!!!!!!
+//******  use call to MainInterface
+//which should be defined in the main application
+//as instance of TCommonInterface class
+//
+//***************************************
+
+
+uses
+  {LCLIntf, LCLType, LMessages, Messages,} SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  Dialogs, StdCtrls {,SdpoSerial ;}{, SynAser},
+  HWAbstractDevices;
+
+
+
+type 
+  tError = record
+    ErrorCode: integer;
+    ErrorString: string;
+  end;
+
+
+
+type
+   TCommResult = ( CCommOK, CCommError, CCommNotConnected, CCommNotImplemented);
+
+
+
+type
+  TPressureDevices = ( CpAnode, CpCathode, CpBPControl,
+                       CpFlowH2, CpFlowN2, CpFlowO2, CpFlowCO);
+  TFlowDevices = ( CFlowH2, CFlowO2, CFlowN2, CFlowCO);
+  TValveDevices = ( CVanodeInH2, CVanodeInN2, CVcathodeInO2, CVcathodeInN2, CVcathodeInAir,
+                     CVanodeBypass, CVcathodeBypass,
+                     CVCOdump, CVCObleed,
+                     CVN2dump, CVN2toAnode, CVN2toCathode,
+                     CVH2toAnode, CVH2toCathode,
+                     CVO2toAnode, CVO2toCathode,
+                     CVoutAnodeToH2, CVoutCathodeToO2 );
+  TTempDevices  = ( CTbubH2, CTlineH2, CTbubO2, CTlineO2, CTbubN2, CTlineN2,
+                     CTcellBot, CTcellTop, CTRoom,
+                     CTflowH2, CTflowO2, CTflowN2, CTflowCO);
+
+  TPressureStats =  array [TPressureDevices] of TPressureRec;
+
+
+  TFlowStats = array [TFlowDevices] of TFlowRec;
+  TFlowArray = array [TFlowDevices] of double;
+
+  TValveStats = array [TValveDevices] of TValveRec;
+  TValveArray = array [TValveDevices] of boolean;
+
+  TTempStats = array [TTempDevices] of TTempRec;
+
+  TValveCathodeGas = (CGasCathodeO2, CGasCathodeAir, CGasCathodeN2);
+  TValveAnodeGas = (CGasAnodeH2, CGasAnodeN2);
+
+   //
+   //hw devices stats structures - copy from original in "hwabstractdevices" - here for convenience
+   //
+   {
+      TPotentioMode = (CPotCC, CPotCV, CPotCR, CPotCP);
+
+      TPotentioStats = record
+           isDummy: boolean;
+           connected: boolean;
+           timestamp: TDateTime;
+           valid: boolean;
+           U: double;
+           I: double;
+           P: double;
+           //status
+           IsON: boolean;
+           mode: TPotentioMode;
+           RemoteSense: boolean;
+           ReversedVoltage: boolean;
+           OverV: boolean;
+           OverC: boolean;
+           OverP: boolean;
+           OverTemp: boolean;
+      end;
+
+      TPressureRec =  record
+           timestamp: TDateTime;
+           valid: boolean;
+           press: double;
+           end;
+
+      TFlowRec = record
+           valid: boolean;
+           flow:  double;
+           timestamp: TDateTime;
+           end;
+
+      TValveRec  = record
+           timestamp: TDateTime;
+           valid: boolean;
+           open: boolean;
+           end;
+
+      TTempRec = record
+           valid: boolean;
+           temp: double;
+           timestamp: TDateTime;
+           end;
+
+   }
+
+
+
+
+type
+  TCommonInterfaceObject = class
+  public
+    //function LastCommResultOK: boolean;
+    //procedure SetDebugLvl(dlvl: byte);
+    function Info: AnsiString;
+    function InitAll: boolean;  //IMPORTANT TO CALL - creates & ini  all necessary modules
+    procedure TerminateAll;     //when closing application...
+    function LastResult: TCommResult;
+    procedure PotentioAssign( dev: TPotentiostatObject );
+    procedure PotentioCheckStatus;
+    procedure PotentioRead;
+    procedure PotentioSetCC( val: double);
+    procedure PotentioSetCV( val: double);
+    procedure PotentioTurnON;
+    procedure PotentioTurnOFF;
+    procedure PressureAssign( dev: TPressureCtrlObject );
+    procedure PressureRead;
+    procedure PressureSet( which: TPressureDevices; val: double);
+    procedure PressureInit;
+    procedure FlowRead;
+    procedure FlowSet( which: TFlowDevices; val: double);
+    procedure FlowInit;
+    procedure ValveUpdate;
+    Procedure ValveOpen( which: TValveDevices);
+    Procedure ValveClose( which: TValveDevices);
+    //Procedure ValveForceState( which: TValveDevices; state: boolean); {will not check rules = dangerous!!}
+    Procedure ValveCloseAll;
+    Procedure ValveSetCathode( which: TValveCathodeGas);
+    Procedure ValveSetAnode( which: TValveAnodeGas);
+    //... and others
+    procedure ValveInit;
+    procedure TempRead;
+    procedure TempSet( which: TTempDevices; val: double);
+    procedure TempInit;
+    procedure ReadEverything;
+  public
+    //use these to access all values and status
+    PotentioStats: TPotentioStats;
+    PressureStats: TPressureStats;
+    FlowStats: TFlowStats;
+    ValveStats: TValveStats;
+    TempStats: TTempStats;
+    //connection status (after call "check" function
+    PotentioConnected: boolean;
+  private
+    //!!! which module for potentio is used, is selected through elswhere in the application
+    MyPotentio: TPotentiostatObject;
+
+    ValveInternalState:  TValveArray;
+    LastRes: TCommResult;
+    LastResMsg: string;
+    //FlowLastSP: TFLowArray;
+  private
+    procedure ValveCheckRules;
+  end;
+
+
+
+
+
+procedure GetSerialPortsOnSystem(var Strings: TStrings);
+{return list of strings contanining available com portr device on system
+maybe works OK only on Windows}
+
+
+
+
+
+
+
+implementation
+
+
+
+
+//{$Include Potentio_KolPTC.pas}
+//{$Include FlowCtrl_dummy.pas}
+//{$Include ValveCtrl_dummy.pas}
+//{$Include TempCtrl_dummy.pas}
+//{$Include PressureCtrl_dummy.pas}
+
+Uses KolPTCinterface{, FlowCtrlDummy, ValveCtrlDummy, TempCtrlDummy};
+
+
+//procedure TCommonInterfaceObject.SetDebug(b: boolean);
+//begin
+// BKdebug := b;
+//end;
+
+{
+function InitAll: boolean;
+    procedure TerminateAll;
+    function LastResult: TCommResult;
+    procedure PotentioAssign( dev: TPotentiostatObject );
+    procedure PotentioCheckStatus;
+    procedure PotentioRead;
+    procedure PotentioSetCC( val: double);
+    procedure PotentioSetCV( val: double);
+    procedure PotentioTurnON;
+    procedure PotentioTurnOFF;
+}
+
+function TCommonInterfaceObject.Info: AnsiString;
+begin
+  Result := 'Common interface: KolPTC only - 2014-11-18';
+end;
+
+function TCommonInterfaceObject.InitAll: boolean;
+{init all communication modules!!! improtant}
+Var
+  r: boolean;
+begin
+  Result := false;
+  if MyPotentio<>Nil then
+    begin
+     r := MyPotentio.Connect;
+     PotentioConnected:= MyPotentio.IsConnected;
+     Result :=  PotentioConnected;
+    end;
+  //........
+end;
+
+Procedure TCommonInterfaceObject.TerminateAll;
+{CLOSE all communication modules!!! improtant}
+begin
+  if MyPotentio<>Nil then
+    begin
+      MyPotentio.Disconnect;
+    end;
+  //........
+end;
+
+
+function TCommonInterfaceObject.LastResult: TCommResult;
+{0 = OK ... }
+begin
+  //Result := LastResCode;
+end;
+
+procedure TCommonInterfaceObject.PotentioAssign( dev: TPotentiostatObject );
+begin
+  MyPotentio := dev;
+end;
+
+procedure TCommonInterfaceObject.PotentioCheckStatus;
+begin
+  PotentioConnected:= false;
+  if MyPotentio=Nil then exit;
+  PotentioConnected:= MyPotentio.IsConnected;
+end;
+
+procedure TCommonInterfaceObject.PotentioRead;
+begin
+  if MyPotentio=Nil then
+    begin
+      LastRes := CCommNotConnected;
+      LastResMsg:= 'PTC Not connected';
+      exit;
+    end;
+  MyPotentio.ReadStats(PotentioStats);
+  if MyPotentio.LastResOK then  LastRes := CCommOK
+  else
+     LastRes := CCommError;
+     LastResMsg:= MyPotentio.GetLastResMsg;
+end;
+
+
+
+procedure TCommonInterfaceObject.PotentioSetCC( val: double);
+begin
+  if MyPotentio=Nil then exit;
+  MyPotentio.SetCC(val);
+end;
+
+
+
+procedure TCommonInterfaceObject.PotentioSetCV( val: double);
+begin
+  if MyPotentio=Nil then exit;
+  MyPotentio.SetCV(val);
+end;
+
+
+procedure TCommonInterfaceObject.PotentioTurnON;
+begin
+  if MyPotentio=Nil then exit;
+  MyPotentio.TurnON;
+  if MyPotentio.LastResOK then  LastRes := CCommOK
+  else
+     LastRes := CCommError;
+     LastResMsg:= MyPotentio.GetLastResMsg;
+end;
+
+
+procedure TCommonInterfaceObject.PotentioTurnOFF;
+begin
+  if MyPotentio=Nil then exit;
+  MyPotentio.TurnOFF;
+  if MyPotentio.LastResOK then  LastRes := CCommOK
+  else
+     LastRes := CCommError;
+     LastResMsg:= MyPotentio.GetLastResMsg;
+end;
+
+//  *********************
+//  pressure
+//
+
+procedure  TCommonInterfaceObject.PressureAssign( dev: TPressureCtrlObject );
+begin
+  //nil
+  ShowMessage('Function not implemented');
+end;
+
+procedure TCommonInterfaceObject.PressureRead;
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+procedure TCommonInterfaceObject.PressureSet( which: TPressureDevices; val: double);
+begin
+  ShowMessage('Function not implemented');
+end;
+
+procedure TCommonInterfaceObject.PressureInit;
+begin
+  ShowMessage('Function not implemented');
+end;
+
+procedure TCommonInterfaceObject.FlowRead;
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+procedure TCommonInterfaceObject.FlowSet( which: TFlowDevices; val: double);
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+procedure TCommonInterfaceObject.FlowInit;
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+
+procedure TCommonInterfaceObject.ValveUpdate;
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+
+Procedure TCommonInterfaceObject.ValveOpen( which: TValveDevices);
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+
+Procedure TCommonInterfaceObject.ValveClose( which: TValveDevices);
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+
+//Procedure TCommonInterfaceObject.ValveForceState( which: TValveDevices; state: boolean); {will not check rules = dangerous!!}
+
+
+
+Procedure TCommonInterfaceObject.ValveCloseAll;
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+
+Procedure TCommonInterfaceObject.ValveSetCathode( which: TValveCathodeGas);
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+
+Procedure TCommonInterfaceObject.ValveSetAnode( which: TValveAnodeGas);
+begin
+  ShowMessage('Function not implemented');
+end;
+
+//... and others
+
+
+procedure TCommonInterfaceObject.ValveInit;
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+
+procedure TCommonInterfaceObject.TempRead;
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+
+procedure TCommonInterfaceObject.TempSet( which: TTempDevices; val: double);
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+
+procedure TCommonInterfaceObject.TempInit;
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+
+procedure TCommonInterfaceObject.ReadEverything;
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+procedure TCommonInterfaceObject.ValveCheckRules;
+begin
+  ShowMessage('Function not implemented');
+end;
+
+
+
+
+//
+//***************************
+//
+
+procedure GetSerialPortsOnSystem(var Strings: TStrings);
+Var
+  listcom: string;
+  i: integer;
+begin
+{$IFDEF WINDOWS}
+  listcom := GetSerialPortNames;  //comma separated list
+  //
+   ExtractStrings
+
+{$ENDIF}
+end;
+
+
+
+
+
+
+
+
+
+end.
+

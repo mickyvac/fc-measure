@@ -1,0 +1,109 @@
+/******************************************************************************/
+/* Batch file for meassuring characteristics of cell especialy for fuel cell. */
+/*                                                                            */
+/*                                 * * *                                      */
+/*                                                                            */
+/* In first part is options of the form for creating this file.  One  line is */
+/* description  and  next  line  is  value.  In the second part is data which */
+/* are shared for all box of data for batchnig.In third part is datablock for */
+/* individual parts from batch.  It is introduced by head and blocks  of data */
+/* are continuing.                                                            */
+/*                                                                            */
+/* Note: All values are in mV or mA and ms.                                   */
+/******************************************************************************/
+/* The first part:                                                            */
+/*----------------------------------------------------------------------------*/
+/* Are curves from the neighboring boxes connected? (boolean - 1 or 0)        */
+ConectedLines»1
+/* Are the value sweep "stair" terminated by "-" and no by "|"? (boolean 1/0) */
+RampAtTheEnd»1
+/* What is the file name for save a massuring data? (string)                  */
+TempFileName»
+/* What is use for feedbacking? (string - Current/Voltage)                    */
+TempFeedBack»Current
+/* What is the type? (string - Const/From To)                                 */
+TempProcessType»Const
+/* What is the duration? (int64)                                              */
+TempDuration»1503750
+/* What is the value which is helded? (double)                                */
+TempConstV»100
+/* Is waiting for stability enabled? (boolean -1 or 0)                        */
+TempWaitForStability»0
+/* What is the tolerance for stability? (double)                              */
+TempStability»50
+/* Starting value for the value sweep (or stepping). (double)                 */
+TempFrom»0
+/* Ending value for the value sweep (or stepping). (double)                   */
+TempTo»10000
+/* Stap for the value sweep (or stepping). (double)                           */
+TempStep»20
+/* Delay between loading point. (integer)                                     */
+TempDelayBtLoad»500
+                                                                                
+/*----------------------------------------------------------------------------*/
+/* The second part:                                                           */
+/*----------------------------------------------------------------------------*/
+/* Low voltage limit. If it is reach the meassuring is stopped. (double)      */
+LowVoltageLimit»500
+/* High voltage limit. If it is reach the meassuring is stopped. (double)     */
+HighVoltageLimit»2000
+/* Low current limit. If it is reach the meassuring is stopped. (double)      */
+LowCurretLimit»-20000
+/* High current limit. If it is reach the meassuring is stopped. (double)     */
+HighCurretLimit»20000
+/* The repetition cycle. How many times can be cyclic. (int)                  */
+NumOfRepeating»1
+/* The unit which is use for voltage. (uV, mV, V, kV)                         */
+VoltageUnit»mV
+/* The unit which is use for current. (uA, mA, A, kA)                         */
+CurrentUnit»mA
+/* The unit which is use for time. (ms, s, min, h)                            */
+TimeUnit»ms
+                                                                                
+/*----------------------------------------------------------------------------*/
+/* The third part:                                                            */
+/*----------------------------------------------------------------------------*/
+/* What is the file name for save a massuring data? (string)                  */
+/* What is use for feedbacking? (string - Current/Voltage)                    */
+/* What is the type? (string - Const/From To)                                 */
+/* What is the duration? (int64)                                              */
+/* What is the value which is helded? (double)                                */
+/* Is waiting for stability enabled? (boolean -1 or 0)                        */
+/* What is the tolerance for stability? (double)                              */
+/* Starting value for the value sweep (or stepping). (double)                 */
+/* Ending value for the value sweep (or stepping). (double)                   */
+/* Stap for the value sweep (or stepping). (double)                           */
+/* Duration of individual steps in the value sweep. (integer)                 */
+/* Delay between loading point. (integer)                                     */
+/* Repeating individual characteristic. (boolean - 1/0)                       */
+                                                                                
+ID»0
+FileName»VA_3sec_01.txt
+FeedBack»Current
+ProcessType»From To
+Duration»500000
+ConstV»0
+WaitForStability»0
+Stability»50
+From»0
+To»-10000
+Step»6
+TimeOfStep»299.820107935239
+DelayBtLoad»500
+CycleChar»0
+                                                                                
+ID»1
+FileName»VA_3sec_02.txt
+FeedBack»Current
+ProcessType»From To
+Duration»500000
+ConstV»100
+WaitForStability»0
+Stability»50
+From»0
+To»6000
+Step»300
+TimeOfStep»23809.5238095238
+DelayBtLoad»500
+CycleChar»0
+                                                                                

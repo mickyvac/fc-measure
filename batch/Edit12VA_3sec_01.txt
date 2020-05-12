@@ -1,0 +1,21 @@
+#Mereni provedeno: 26.04.2016 10:40:15
+#Teplota: NAN deg C; Teplota okoli: 0,0
+#Invert Current: FALSEInvert Voltage: FALSE
+#From 0 mA to 5000 mA by step 100
+#Prodleva mezi nacitanim bodu: 3001,49700598802
+#Fuel used: TODO
+#Oxigen medium: TODO
+#Anode material: -unspecified-
+#Cathode material: -unspecified-
+#Membrane: -unspecified-
+#MEApreparation: -unspecified-
+#GDL material: -unspecified- -unspecified-
+#Press for hot-pressing: TODO
+#Comment: 
+#Osa X [A]	Osa Y [V]	Vykon [A*V]
+#Osa X 
+#-------------------------------------------------------------------------------------------------------------------------------------------------------
+Time from start [ms]	Temperature [°C]	Current [mA]	Voltage [V]	Power [mW]	Instability [mV]	Time
+
+Maximalni Vykon [mW]	Odpovídající proud [mA]	Odpovídající napìtí [V]	Maximální nestabilita [mV]	pøi napìtí [mV]
+0	0	0	0	0

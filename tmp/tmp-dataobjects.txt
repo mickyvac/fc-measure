@@ -1,0 +1,26 @@
+TRegistryItemTimeStamp = class (TRegistryItem)   //IMPLEMENTS IMPLICIT THREAD SAFE ACCESS!!!!!!!
+public
+  constructor Create(n: string; i: longint); overload;
+  constructor Create(n: string; s: string); overload;
+  constructor Create(n: string; d: double); overload;
+  constructor Create(n: string; b: boolean); overload;
+  constructor Create(n: string; v: TMVSimpleVariant); overload;
+  destructor Destroy; override;
+private
+  fTS: TDateTime;
+public
+  property TS: TDateTime read fTS write fTS;
+private
+  function GetIntTS(var TS: TDateTime): longint;  virtual;
+  function GetStrTS(var TS: TDateTime): string;  virtual;
+  function GetDoubleTS(var TS: TDateTime): double; virtual;
+  function GetBoolTS(var TS: TDateTime): boolean; virtual;
+		procedure SetInt(i: longint); virtual;
+		procedure SetStr(s: string); virtual;
+		procedure SetDouble(d: double); virtual;
+		procedure SetBool(b: boolean); virtual;
+		procedure SetIntTS(i: longint; TS: TDateTime ); virtual;
+		procedure SetStrTS(s: string; TS: TDateTime); virtual;
+		procedure SetDoubleTS(d: double; TS: TDateTime); virtual;
+		procedure SetBoolTS(b: boolean; TS: TDateTime); virtual;
+end;

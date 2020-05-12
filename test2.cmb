@@ -1,0 +1,259 @@
+/******************************************************************************/
+/* Batch file for meassuring characteristics of cell especialy for fuel cell. */
+/*                                                                            */
+/*                                 * * *                                      */
+/*                                                                            */
+/* In first part is options of the form for creating this file.  One  line is */
+/* description  and  next  line  is  value.  In the second part is data which */
+/* are shared for all box of data for batchnig.In third part is datablock for */
+/* individual parts from batch.  It is introduced by head and blocks  of data */
+/* are continuing.                                                            */
+/*                                                                            */
+/* Note: All values are in mV or mA and ms.                                   */
+/******************************************************************************/
+/* The first part:                                                            */
+/*----------------------------------------------------------------------------*/
+/* Are curves from the neighboring boxes connected? (boolean - 1 or 0)        */
+ConectedLines»1
+/* Are the value sweep "stair" terminated by "-" and no by "|"? (boolean 1/0) */
+RampAtTheEnd»1
+/* What is the file name for save a massuring data? (string)                  */
+TempFileName»
+/* What is use for feedbacking? (string - Current/Voltage)                    */
+TempFeedBack»Current
+/* What is the type? (string - Const/From To)                                 */
+TempProcessType»Const
+/* What is the duration? (int64)                                              */
+TempDuration»10000
+/* What is the value which is helded? (double)                                */
+TempConstV»700
+/* Is waiting for stability enabled? (boolean -1 or 0)                        */
+TempWaitForStability»0
+/* What is the tolerance for stability? (double)                              */
+TempStability»50000000
+/* Starting value for the value sweep (or stepping). (double)                 */
+TempFrom»100000000
+/* Ending value for the value sweep (or stepping). (double)                   */
+TempTo»200000000
+/* Stap for the value sweep (or stepping). (double)                           */
+TempStep»499999.999999999
+/* Delay between loading point. (integer)                                     */
+TempDelayBtLoad»500
+                                                                                
+/*----------------------------------------------------------------------------*/
+/* The second part:                                                           */
+/*----------------------------------------------------------------------------*/
+/* Low voltage limit. If it is reach the meassuring is stopped. (double)      */
+LowVoltageLimit»200
+/* High voltage limit. If it is reach the meassuring is stopped. (double)     */
+HighVoltageLimit»1500
+/* Low current limit. If it is reach the meassuring is stopped. (double)      */
+LowCurretLimit»-10
+/* High current limit. If it is reach the meassuring is stopped. (double)     */
+HighCurretLimit»15000
+/* The repetition cycle. How many times can be cyclic. (int)                  */
+NumOfRepeating»1
+/* The unit which is use for voltage. (uV. mV. V. kV)                         */
+VoltageUnit»mV
+/* The unit which is use for current. (uA. mA. A. kA)                         */
+CurrentUnit»mA
+/* The unit which is use for time. (ms. s. min. h)                            */
+TimeUnit»ms
+                                                                                
+/*----------------------------------------------------------------------------*/
+/* The third part:                                                            */
+/*----------------------------------------------------------------------------*/
+/* What is the file name for save a massuring data? (string)                  */
+/* What is use for feedbacking? (string - Current/Voltage)                    */
+/* What is the type? (string - Const/From To)                                 */
+/* What is the duration? (int64)                                              */
+/* What is the value which is helded? (double)                                */
+/* Is waiting for stability enabled? (boolean -1 or 0)                        */
+/* What is the tolerance for stability? (double)                              */
+/* Starting value for the value sweep (or stepping). (double)                 */
+/* Ending value for the value sweep (or stepping). (double)                   */
+/* Stap for the value sweep (or stepping). (double)                           */
+/* Duration of individual steps in the value sweep. (integer)                 */
+/* Delay between loading point. (integer)                                     */
+/* Repeating individual characteristic. (boolean - 1/0)                       */
+                                                                                
+ID»0
+FileName»BreakIn_holdVoltage_step1_3.txt
+FeedBack»Voltage
+ProcessType»Const
+Duration»20000
+ConstV»600
+WaitForStability»0
+Stability»50000000
+From»100000000
+To»200000000
+Step»499999.999999999
+TimeOfStep»49.7512437810944
+DelayBtLoad»500
+CycleChar»0
+                                                                                
+ID»1
+FileName»BreakIn_holdVoltage_step2_3.txt
+FeedBack»Voltage
+ProcessType»Const
+Duration»10000
+ConstV»700
+WaitForStability»0
+Stability»50000000
+From»100000000
+To»200000000
+Step»499999.999999999
+TimeOfStep»49.7512437810944
+DelayBtLoad»500
+CycleChar»0
+                                                                                
+ID»2
+FileName»
+FeedBack»Voltage
+ProcessType»Const
+Duration»10000
+ConstV»500
+WaitForStability»0
+Stability»50000000
+From»100000000
+To»200000000
+Step»25000000
+TimeOfStep»2000
+DelayBtLoad»500
+CycleChar»0
+                                                                                
+ID»3
+FileName»
+FeedBack»Voltage
+ProcessType»Const
+Duration»10000
+ConstV»700
+WaitForStability»0
+Stability»50000000
+From»100000000
+To»200000000
+Step»25000000
+TimeOfStep»240000
+DelayBtLoad»500
+CycleChar»0
+                                                                                
+ID»4
+FileName»
+FeedBack»Voltage
+ProcessType»Const
+Duration»10000
+ConstV»500
+WaitForStability»0
+Stability»50000000
+From»100000000
+To»200000000
+Step»25000000
+TimeOfStep»240000
+DelayBtLoad»500
+CycleChar»0
+                                                                                
+ID»5
+FileName»
+FeedBack»Voltage
+ProcessType»Const
+Duration»10000
+ConstV»700
+WaitForStability»0
+Stability»50000000
+From»100000000
+To»200000000
+Step»25000000
+TimeOfStep»240000
+DelayBtLoad»500
+CycleChar»0
+                                                                                
+ID»6
+FileName»
+FeedBack»Voltage
+ProcessType»Const
+Duration»10000
+ConstV»500
+WaitForStability»0
+Stability»50000000
+From»100000000
+To»200000000
+Step»25000000
+TimeOfStep»240000
+DelayBtLoad»500
+CycleChar»0
+                                                                                
+ID»7
+FileName»
+FeedBack»Voltage
+ProcessType»Const
+Duration»10000
+ConstV»700
+WaitForStability»0
+Stability»50000000
+From»100000000
+To»200000000
+Step»25000000
+TimeOfStep»240000
+DelayBtLoad»500
+CycleChar»0
+                                                                                
+ID»8
+FileName»
+FeedBack»Voltage
+ProcessType»Const
+Duration»10000
+ConstV»500
+WaitForStability»0
+Stability»50000000
+From»100000000
+To»200000000
+Step»25000000
+TimeOfStep»240000
+DelayBtLoad»500
+CycleChar»0
+                                                                                
+ID»9
+FileName»
+FeedBack»Voltage
+ProcessType»Const
+Duration»10000
+ConstV»700
+WaitForStability»0
+Stability»50000000
+From»100000000
+To»200000000
+Step»25000000
+TimeOfStep»240000
+DelayBtLoad»500
+CycleChar»0
+                                                                                
+ID»10
+FileName»
+FeedBack»Voltage
+ProcessType»Const
+Duration»10000
+ConstV»500
+WaitForStability»0
+Stability»50000000
+From»100000000
+To»200000000
+Step»25000000
+TimeOfStep»240000
+DelayBtLoad»500
+CycleChar»0
+                                                                                
+ID»12
+FileName»BreakIn_holdCurrent_step3_3.txt
+FeedBack»Current
+ProcessType»Const
+Duration»100000
+ConstV»200
+WaitForStability»0
+Stability»50
+From»100
+To»200
+Step»25
+TimeOfStep»8640000
+DelayBtLoad»500
+CycleChar»0
+                                                                                

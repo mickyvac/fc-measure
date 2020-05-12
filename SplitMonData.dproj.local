@@ -1,0 +1,8 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<BorlandProject>
+  <Transactions>
+    <Transaction>2017.11.27 14:19:12.932.pas,C:\Users\Michal\Documents\RAD Studio\Projects\Unit1.pas=D:\Michal\FCSLAB\PROG-PTCControl\PTCControl_2017-11-07-D10\SplitMonDataUnit.pas</Transaction>
+    <Transaction>2017.11.27 14:19:12.949.dfm,C:\Users\Michal\Documents\RAD Studio\Projects\Unit1.dfm=D:\Michal\FCSLAB\PROG-PTCControl\PTCControl_2017-11-07-D10\SplitMonDataUnit.dfm</Transaction>
+    <Transaction>2017.11.27 14:19:19.714.dproj,C:\Users\Michal\Documents\RAD Studio\Projects\Project1.dproj=D:\Michal\FCSLAB\PROG-PTCControl\PTCControl_2017-11-07-D10\SplitMonData.dproj</Transaction>
+  </Transactions>
+</BorlandProject>

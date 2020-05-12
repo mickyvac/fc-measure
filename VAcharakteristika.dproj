@@ -1,0 +1,249 @@
+﻿	<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+		<PropertyGroup>
+			<ProjectGuid>{361AA3E3-21B2-4DB7-AE95-7A421E384042}</ProjectGuid>
+			<MainSource>VAcharakteristika.dpr</MainSource>
+			<Config Condition="'$(Config)'==''">Debug</Config>
+			<DCC_DCCCompiler>DCC32</DCC_DCCCompiler>
+			<ProjectVersion>12.0</ProjectVersion>
+		</PropertyGroup>
+		<PropertyGroup Condition="'$(Config)'=='Base' or '$(Base)'!=''">
+			<Base>true</Base>
+		</PropertyGroup>
+		<PropertyGroup Condition="'$(Config)'=='Release' or '$(Cfg_1)'!=''">
+			<Cfg_1>true</Cfg_1>
+			<CfgParent>Base</CfgParent>
+			<Base>true</Base>
+		</PropertyGroup>
+		<PropertyGroup Condition="'$(Config)'=='Debug' or '$(Cfg_2)'!=''">
+			<Cfg_2>true</Cfg_2>
+			<CfgParent>Base</CfgParent>
+			<Base>true</Base>
+		</PropertyGroup>
+		<PropertyGroup Condition="'$(Base)'!=''">
+			<ImageDebugInfo>true</ImageDebugInfo>
+			<DCC_ImageBase>00400000</DCC_ImageBase>
+			<DCC_DependencyCheckOutputName>VAcharakteristika.exe</DCC_DependencyCheckOutputName>
+			<DCC_IOChecking>false</DCC_IOChecking>
+			<DCC_MapFile>3</DCC_MapFile>
+			<DCC_UnitAlias>WinTypes=Windows;WinProcs=Windows;DbiTypes=BDE;DbiProcs=BDE;DbiErrs=BDE;WinTypes=Windows;WinProcs=Windows;$(DCC_UnitAlias)</DCC_UnitAlias>
+			<DCC_RemoteDebug>true</DCC_RemoteDebug>
+			<DCC_UnitSearchPath>$(DELPHI)\Lib\Debug;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>
+			<DCC_Platform>x86</DCC_Platform>
+			<DCC_UsePackage>vclx;vcl;rtl;dsnap;dbrtl;vcldb;VclSmp;bdertl;vcldbx;teeui;teedb;tee;dss;visualclx;visualdbclx;vclactnband;vclshlctrls</DCC_UsePackage>
+			<DCC_K>false</DCC_K>
+			<DCC_F>false</DCC_F>
+			<DCC_S>false</DCC_S>
+			<DCC_N>true</DCC_N>
+			<DCC_DebugInfoInExe>true</DCC_DebugInfoInExe>
+			<DCC_UNSAFE_CAST>true</DCC_UNSAFE_CAST>
+			<DCC_E>false</DCC_E>
+			<DCC_SymbolReferenceInfo>1</DCC_SymbolReferenceInfo>
+		</PropertyGroup>
+		<PropertyGroup Condition="'$(Cfg_1)'!=''">
+			<DCC_LocalDebugSymbols>false</DCC_LocalDebugSymbols>
+			<DCC_Define>RELEASE;$(DCC_Define)</DCC_Define>
+			<DCC_SymbolReferenceInfo>0</DCC_SymbolReferenceInfo>
+			<DCC_DebugInformation>false</DCC_DebugInformation>
+		</PropertyGroup>
+		<PropertyGroup Condition="'$(Cfg_2)'!=''">
+			<DCC_Define>DEBUG;$(DCC_Define)</DCC_Define>
+		</PropertyGroup>
+		<ItemGroup>
+			<DelphiCompile Include="VAcharakteristika.dpr">
+				<MainSource>MainSource</MainSource>
+			</DelphiCompile>
+			<RcCompile Include="myicons.rc">
+				<ContainerId>RC</ContainerId>
+				<ContainerId>RC</ContainerId>
+				<Form>myicons.res</Form>
+			</RcCompile>
+			<DCCReference Include="main.pas">
+				<Form>FormMain</Form>
+			</DCCReference>
+			<DCCReference Include="LoggerFormUnit.pas">
+				<Form>LoggerForm</Form>
+			</DCCReference>
+			<DCCReference Include="debug.pas">
+				<Form>Form3</Form>
+			</DCCReference>
+			<DCCReference Include="datastorage.pas"/>
+			<DCCReference Include="myutils.pas"/>
+			<DCCReference Include="SetData.pas">
+				<Form>Batch</Form>
+			</DCCReference>
+			<DCCReference Include="SetData_Help.pas">
+				<Form>BatchHelp</Form>
+			</DCCReference>
+			<DCCReference Include="FormstatusUnit.pas">
+				<Form>FormStatus</Form>
+			</DCCReference>
+			<DCCReference Include="Module_VAchar.pas">
+				<Form>FormVAchar</Form>
+			</DCCReference>
+			<DCCReference Include="module_simple.pas">
+				<Form>FormSimpleModule</Form>
+			</DCCReference>
+			<DCCReference Include="module_batch.pas">
+				<Form>FormBatch</Form>
+			</DCCReference>
+			<DCCReference Include="FormHWAccessControlUnit.pas">
+				<Form>FormHWAccessControl</Form>
+			</DCCReference>
+			<DCCReference Include="FormPTCHardwareUnit.pas">
+				<Form>FormPTCHardware</Form>
+			</DCCReference>
+			<DCCReference Include="FormFlowHardwareUnit.pas">
+				<Form>FormFlowHardware</Form>
+			</DCCReference>
+			<DCCReference Include="FormProjectControl.pas">
+				<Form>ProjectControl</Form>
+			</DCCReference>
+			<DCCReference Include="FormNewProjectUnit.pas">
+				<Form>NewProjectForm</Form>
+			</DCCReference>
+			<DCCReference Include="FormGlobalConfig.pas">
+				<Form>GlobalConfig</Form>
+			</DCCReference>
+			<DCCReference Include="FormAdvancedPlotUnit.pas">
+				<Form>FormAdvancedPlot</Form>
+			</DCCReference>
+			<DCCReference Include="FormModuleBatchRomanUnit.pas">
+				<Form>FormModuleBatchRoman</Form>
+			</DCCReference>
+			<DCCReference Include="cport\CPort.pas"/>
+			<DCCReference Include="cport\CPortAbout.pas">
+				<Form>AboutBox</Form>
+			</DCCReference>
+			<DCCReference Include="cport\CPortCtl.pas"/>
+			<DCCReference Include="cport\CPortEsc.pas"/>
+			<DCCReference Include="cport\CPortSetup.pas"/>
+			<DCCReference Include="FormDebugUnit.pas">
+				<Form>FormDebug</Form>
+			</DCCReference>
+			<DCCReference Include="MyParseUtils.pas"/>
+			<DCCReference Include="MyChartModule.pas"/>
+			<DCCReference Include="FormValveControlUnit.pas">
+				<Form>FormValveControl</Form>
+			</DCCReference>
+			<DCCReference Include="MyComPort.pas"/>
+			<DCCReference Include="MyThreadUtils.pas"/>
+			<DCCReference Include="LoggerThreadSafe.pas"/>
+			<DCCReference Include="PTCCalibUsingBK8500Form.pas">
+				<Form>PTCCalibForm</Form>
+			</DCCReference>
+			<DCCReference Include="MyDataUtils.pas"/>
+			<DCCReference Include="ModuleCVunit.pas">
+				<Form>FormCV</Form>
+			</DCCReference>
+			<DCCReference Include="MyContainers.pas"/>
+			<DCCReference Include="MyImportKolData.pas"/>
+			<DCCReference Include="processinfo_winapi.pas"/>
+			<DCCReference Include="MyPSUtils_winapi.pas"/>
+			<DCCReference Include="ModuleEISunit.pas">
+				<Form>FormEIS</Form>
+			</DCCReference>
+			<DCCReference Include="StreamIO.pas"/>
+			<DCCReference Include="MyStreamReader.pas"/>
+			<DCCReference Include="MyAquireThreadNEW_TCPIP.pas"/>
+			<DCCReference Include="MyStringHelpers.pas"/>
+			<DCCReference Include="FlowInterface_FCS_TCPIP.pas"/>
+			<DCCReference Include="VTPInterface_TCPIP_new.pas"/>
+			<DCCReference Include="DataStorageV2.pas"/>
+			<DCCReference Include="MyFileUtils.pas"/>
+			<DCCReference Include="cport\CPortTrmSet.pas">
+				<Form>ComTrmSetForm</Form>
+			</DCCReference>
+			<DCCReference Include="PTCInterface_ZS1806.pas"/>
+			<DCCReference Include="MyAcquireThreadNEW_RS232.pas"/>
+			<DCCReference Include="Debug_RegView.pas">
+				<Form>FormRegView</Form>
+			</DCCReference>
+			<DCCReference Include="MyEditInterfaceHelper.pas"/>
+			<DCCReference Include="MyJobThreadSafeManager.pas"/>
+			<DCCReference Include="PTCinterface_Dummy.pas"/>
+			<DCCReference Include="PTCInterface_KolPTC_TCPIP_new.pas"/>
+			<DCCReference Include="PTCInterface_M97XX.pas"/>
+			<DCCReference Include="PLIxx_LowLevel_Interface.pas"/>
+			<DCCReference Include="HWAbstractdevicesV3.pas"/>
+			<DCCReference Include="HWinterface.pas"/>
+			<DCCReference Include="FormPressureTestUnit.pas">
+				<Form>PressureTest</Form>
+			</DCCReference>
+			<DCCReference Include="PTCInterface_BK8500.pas"/>
+			<DCCReference Include="unitException.pas">
+				<Form>ExceptionDialog</Form>
+			</DCCReference>
+			<DCCReference Include="TestPlotFormUnit.pas">
+				<Form>Form1</Form>
+			</DCCReference>
+			<DCCReference Include="PTCInterface_PLI.pas"/>
+			<DCCReference Include="Unit2.pas">
+				<Form>Form2</Form>
+			</DCCReference>
+			<DCCReference Include="MVvariant_DataObjects.pas"/>
+			<DCCReference Include="ConfigManager.pas"/>
+			<DCCReference Include="testloadgui.pas">
+				<Form>Form4</Form>
+			</DCCReference>
+			<DCCReference Include="dummydfm.pas">
+				<Form>Form5</Form>
+			</DCCReference>
+			<DCCReference Include="FlowInterface_Alicat_new3.pas"/>
+			<BuildConfiguration Include="Base">
+				<Key>Base</Key>
+			</BuildConfiguration>
+			<BuildConfiguration Include="Debug">
+				<Key>Cfg_2</Key>
+				<CfgParent>Base</CfgParent>
+			</BuildConfiguration>
+			<BuildConfiguration Include="Release">
+				<Key>Cfg_1</Key>
+				<CfgParent>Base</CfgParent>
+			</BuildConfiguration>
+		</ItemGroup>
+		<Import Project="$(BDS)\Bin\CodeGear.Delphi.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Delphi.Targets')"/>
+		<ProjectExtensions>
+			<Borland.Personality>Delphi.Personality.12</Borland.Personality>
+			<Borland.ProjectType>VCLApplication</Borland.ProjectType>
+			<BorlandProject>
+				<Delphi.Personality>
+					<Source>
+						<Source Name="MainSource">VAcharakteristika.dpr</Source>
+					</Source>
+					<Parameters>
+						<Parameters Name="UseLauncher">False</Parameters>
+						<Parameters Name="LoadAllSymbols">True</Parameters>
+						<Parameters Name="LoadUnspecifiedSymbols">False</Parameters>
+					</Parameters>
+					<VersionInfo>
+						<VersionInfo Name="IncludeVerInfo">False</VersionInfo>
+						<VersionInfo Name="AutoIncBuild">False</VersionInfo>
+						<VersionInfo Name="MajorVer">1</VersionInfo>
+						<VersionInfo Name="MinorVer">0</VersionInfo>
+						<VersionInfo Name="Release">0</VersionInfo>
+						<VersionInfo Name="Build">0</VersionInfo>
+						<VersionInfo Name="Debug">False</VersionInfo>
+						<VersionInfo Name="PreRelease">False</VersionInfo>
+						<VersionInfo Name="Special">False</VersionInfo>
+						<VersionInfo Name="Private">False</VersionInfo>
+						<VersionInfo Name="DLL">False</VersionInfo>
+						<VersionInfo Name="Locale">1029</VersionInfo>
+						<VersionInfo Name="CodePage">1250</VersionInfo>
+					</VersionInfo>
+					<VersionInfoKeys>
+						<VersionInfoKeys Name="CompanyName"/>
+						<VersionInfoKeys Name="FileDescription"/>
+						<VersionInfoKeys Name="FileVersion">1.0.0.0</VersionInfoKeys>
+						<VersionInfoKeys Name="InternalName"/>
+						<VersionInfoKeys Name="LegalCopyright"/>
+						<VersionInfoKeys Name="LegalTrademarks"/>
+						<VersionInfoKeys Name="OriginalFilename"/>
+						<VersionInfoKeys Name="ProductName"/>
+						<VersionInfoKeys Name="ProductVersion">1.0.0.0</VersionInfoKeys>
+						<VersionInfoKeys Name="Comments"/>
+					</VersionInfoKeys>
+				</Delphi.Personality>
+			</BorlandProject>
+			<ProjectFileVersion>12</ProjectFileVersion>
+		</ProjectExtensions>
+	</Project>

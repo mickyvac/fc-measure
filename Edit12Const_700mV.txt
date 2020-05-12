@@ -1,0 +1,25 @@
+[LinearBatch Acquisition File]
+[Application]
+AppVersion=FC Control v2017-beta build 28.3.2017 12:00:53 - 2926
+[PTC Status]
+ID=VIRTUAL PTC DummyPTC 2016-02-23
+[FLOW]
+[FCSControl]OutputEnabled=
+#Mereni provedeno: 9.2.2018 17:40:12
+#Teplota: NAN deg C; Teplota okoli: NAN
+#Invert Current: TRUEInvert Voltage: FALSE
+#From 100 mV to 200 mV by step 0
+#Prodleva mezi nacitanim bodu: 7500
+#Fuel used: TODO
+#Oxigen medium: TODO
+#Anode material: -unspecified-
+#Cathode material: -unspecified-
+#Membrane: -unspecified-
+#MEApreparation: -unspecified-
+#GDL material: -unspecified- -unspecified-
+#Press for hot-pressing: TODO
+#Comment: 
+#Osa X [A]	Osa Y [V]	Vykon [A*V]
+#Osa X 
+#-------------------------------------------------------------------------------------------------------------------------------------------------------
+Time from start [ms]	Temperature [°C]	Current [mA]	Volt

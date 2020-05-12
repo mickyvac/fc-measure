@@ -1,0 +1,26 @@
+[project]
+projname=Nameless
+projpath=D:\Michal\FCSLAB\PROG-PTCControl\datalog\FCx-2017-05-03-Nameless\project.ini
+projdesc=-default------
+ProjCellArea=1
+ProjAnodeDescr=-unspecified-
+ProjAnodeGDL=-unspecified-
+ProjAnodeLoading=1
+ProjAnodeMinFlow=40
+ProjAnodeStoich=1.2
+ProjCathodeDescr=-unspecified-
+ProjCathodeGDL=-unspecified-
+ProjCathodeLoading=1
+ProjCathodeMinFlow=40
+ProjCathodeStoich=2
+ProjMembrane=-unspecified-
+ProjMEApreparation=-unspecified-
+ProjProjCreateDate=27.8.2015 20:39:56
+ProjInvertCurrent=0
+ProjInvertVoltage=0
+ProjFlowTracking=0
+ProjMaxCurrent=15
+ProjMinCurrent=-15
+ProjMaxVoltage=1.5
+ProjMinVoltage=0.3
+ProjCellType=-unspecified-
